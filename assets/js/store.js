@@ -285,11 +285,46 @@ function renderCategoryCards(){
 function showCategoriesSection(){
   $("#categoryChooserSection")?.classList.remove("hidden");
   $("#categoryProductsSection")?.classList.add("hidden");
+
+  const backLink = $("#categoryBackLink");
+
+  if(backLink){
+    backLink.textContent = "← Back home";
+    backLink.href = "index.html";
+    backLink.onclick = null;
+  }
 }
 
 function showProductsSection(){
   $("#categoryChooserSection")?.classList.add("hidden");
   $("#categoryProductsSection")?.classList.remove("hidden");
+
+  const backLink = $("#categoryBackLink");
+
+  if(backLink){
+    backLink.textContent = "← Back to categories";
+    backLink.href = "categories.html";
+
+    backLink.onclick = (e) => {
+      e.preventDefault();
+
+      activeCategory = "all";
+      search = "";
+
+      const input = $("#searchInput");
+      if(input) input.value = "";
+
+      history.replaceState(null, "", "categories.html");
+
+      showCategoriesSection();
+      renderCategoryCards();
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+      });
+    };
+  }
 }
 
 function filteredProducts(){
