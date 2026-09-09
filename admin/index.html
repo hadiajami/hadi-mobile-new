@@ -37,7 +37,35 @@
     <label>Description<textarea id="productDescription" rows="4"></textarea></label>
     <label>Product image<input id="productImage" type="file" accept="image/*"><small>Upload JPG, PNG or WebP.</small></label>
     <div class="current-image" id="currentImage"></div>
-    <div class="checks"><label><input id="productStock" type="checkbox" checked> In stock</label><label><input id="productFeatured" type="checkbox"> Featured</label><label><input id="productActive" type="checkbox" checked> Active</label></div>
+
+    <div class="checks" id="standardStockChecks">
+      <label><input id="productStock" type="checkbox" checked> In stock</label>
+      <label><input id="productFeatured" type="checkbox"> Featured</label>
+      <label><input id="productActive" type="checkbox" checked> Active</label>
+    </div>
+
+    <div class="phone-options-toggle">
+      <label class="phone-toggle-label">
+        <input id="productHasPhoneOptions" type="checkbox">
+        <span>
+          <strong>Available for multiple phone models</strong>
+          <small>Use this for cases, screen protectors, cables/adapters, mounts or any product whose availability depends on the customer's phone.</small>
+        </span>
+      </label>
+    </div>
+
+    <div class="phone-options-drawer hidden" id="phoneOptionsDrawer">
+      <div class="phone-options-head">
+        <div>
+          <strong>Phone model availability</strong>
+          <small>Add each supported phone and mark whether that exact model is currently available.</small>
+        </div>
+        <button class="mini-btn" id="addPhoneOption" type="button">+ Add phone</button>
+      </div>
+      <div id="phoneOptionsRows"></div>
+      <div class="phone-options-note">For configurable products, the main “In stock” status is calculated automatically from these phone rows.</div>
+    </div>
+
     <button class="gold-btn full" type="submit">Save product</button><div class="message" id="productMsg"></div>
   </form>
 </div>
@@ -52,6 +80,7 @@
     <button class="gold-btn full" type="submit">Save category</button><div class="message" id="categoryMsg"></div>
   </form>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/config.js"></script>
 <script src="../assets/js/admin.js"></script>
