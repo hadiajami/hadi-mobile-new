@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#F8FBFF"><link rel="icon" type="image/jpeg" href="../assets/img/favicon.jpg"><title>Admin Login | HADI MOBILE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body class="login-page">
+<div class="login-glow"></div>
+<main class="login-card">
+  <img src="../assets/img/hadi-mobile-logo.jpg" alt="HADI MOBILE">
+  <span class="eyebrow">SECURE ADMIN</span>
+  <h1>Welcome back.</h1>
+  <p>Sign in to manage your shop.</p>
+  <form id="loginForm">
+    <label>Email<input id="email" type="email" required autocomplete="email" placeholder="admin@example.com"></label>
+    <label>Password<input id="password" type="password" required autocomplete="current-password" placeholder="••••••••"></label>
+    <button type="submit">Sign in</button>
+    <div id="message" class="message"></div>
+  </form>
+  <a class="back" href="../index.html">← Back to store</a>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/admin-login.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#F8FBFF"><link rel="icon" type="image/jpeg" href="../assets/img/favicon.jpg"><title>Admin | HADI MOBILE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+<header class="admin-header">
+  <a href="../index.html" class="admin-brand"><img src="../assets/img/hadi-mobile-icon.jpg"><div><strong>HADI MOBILE</strong><span>ADMIN</span></div></a>
+  <button id="logoutBtn" class="ghost-btn">Sign out</button>
+</header>
+<main class="admin-shell">
+  <section class="admin-title"><span class="eyebrow">CONTROL CENTER</span><h1>Store Manager</h1><p>Edit the shop without touching code.</p></section>
+  <div class="stats" id="stats"></div>
+  <div class="tabs"><button class="tab active" data-tab="products">Products</button><button class="tab" data-tab="categories">Categories</button></div>
+
+  <section id="productsTab" class="tab-panel">
+    <div class="panel-head"><div><h2>Products</h2><p>Add, edit, remove and feature products.</p></div><button class="gold-btn" id="newProduct">+ Add product</button></div>
+    <div class="admin-list" id="productList"></div>
+  </section>
+
+  <section id="categoriesTab" class="tab-panel hidden">
+    <div class="panel-head"><div><h2>Categories</h2><p>Create categories and subcategories. Everything is editable.</p></div><button class="gold-btn" id="newCategory">+ Add category</button></div>
+    <div class="admin-list" id="categoryAdminList"></div>
+  </section>
+</main>
+
+<div class="admin-modal" id="productEditor">
+  <form class="editor-card" id="productForm">
+    <div class="editor-head"><div><span class="eyebrow">PRODUCT</span><h2 id="productEditorTitle">Add product</h2></div><button type="button" class="xbtn" data-close="productEditor">×</button></div>
+    <input type="hidden" id="productId">
+    <label>Product name<input id="productName" required></label>
+    <div class="two"><label>Price (USD)<input id="productPrice" type="number" min="0" step="0.01" required></label><label>Category<select id="productCategory" required></select></label></div>
+    <label>Description<textarea id="productDescription" rows="4"></textarea></label>
+    <label>Product image<input id="productImage" type="file" accept="image/*"><small>Upload JPG, PNG or WebP.</small></label>
+    <div class="current-image" id="currentImage"></div>
+    <div class="checks"><label><input id="productStock" type="checkbox" checked> In stock</label><label><input id="productFeatured" type="checkbox"> Featured</label><label><input id="productActive" type="checkbox" checked> Active</label></div>
+    <button class="gold-btn full" type="submit">Save product</button><div class="message" id="productMsg"></div>
+  </form>
+</div>
+
+<div class="admin-modal" id="categoryEditor">
+  <form class="editor-card" id="categoryForm">
+    <div class="editor-head"><div><span class="eyebrow">CATEGORY</span><h2 id="categoryEditorTitle">Add category</h2></div><button type="button" class="xbtn" data-close="categoryEditor">×</button></div>
+    <input type="hidden" id="categoryId">
+    <label>Name<input id="categoryName" required></label>
+    <label>Parent category<select id="categoryParent"><option value="">None — main category</option></select></label>
+    <label>Display order<input id="categoryOrder" type="number" min="0" value="0"></label>
+    <button class="gold-btn full" type="submit">Save category</button><div class="message" id="categoryMsg"></div>
+  </form>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/admin.js"></script>
+</body>
+</html>
