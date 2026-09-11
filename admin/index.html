@@ -20,6 +20,7 @@
     <button class="tab" data-tab="homepage">Homepage</button>
     <button class="tab" data-tab="categories">Categories</button>
     <button class="tab" data-tab="brands">Brands</button>
+    <button class="tab" data-tab="setup">Setup Studio</button>
     <button class="tab" data-tab="requests">Requests</button>
   </div>
 
@@ -55,6 +56,22 @@
   <section id="brandsTab" class="tab-panel hidden">
     <div class="panel-head"><div><h2>Brands</h2><p>Keep brand filtering clean and easy to manage.</p></div><button class="gold-btn" id="newBrand">+ Add brand</button></div>
     <div class="admin-list" id="brandList"></div>
+  </section>
+
+
+
+  <section id="setupTab" class="tab-panel hidden">
+    <div class="panel-head"><div><h2>Setup Studio</h2><p>Control the real product renders used in Build My Setup.</p></div></div>
+
+    <div class="admin-subsection">
+      <div class="admin-subsection-head"><div><strong>Phone renders</strong><small>Add the central phone image for each model. Use a transparent PNG/WebP aligned vertically.</small></div><button class="gold-btn" id="newSetupDevice">+ Add phone</button></div>
+      <div class="admin-list" id="setupDeviceList"></div>
+    </div>
+
+    <div class="admin-subsection">
+      <div class="admin-subsection-head"><div><strong>Accessory renders</strong><small>Upload transparent product renders that layer over the matching phone.</small></div><button class="gold-btn" id="newSetupRender">+ Add render</button></div>
+      <div class="admin-list" id="setupRenderList"></div>
+    </div>
   </section>
 
   <section id="requestsTab" class="tab-panel hidden">
@@ -137,6 +154,43 @@
     <div class="current-image" id="currentBrandIcon"></div>
     <label>Display order<input id="brandOrder" type="number" min="0" value="0"></label>
     <button class="gold-btn full" type="submit">Save brand</button><div class="message" id="brandMsg"></div>
+  </form>
+</div>
+
+
+
+<div class="admin-modal" id="setupDeviceEditor">
+  <form class="editor-card" id="setupDeviceForm">
+    <div class="editor-head"><div><span class="eyebrow">SETUP STUDIO</span><h2 id="setupDeviceEditorTitle">Add phone render</h2></div><button type="button" class="xbtn" data-close="setupDeviceEditor">×</button></div>
+    <input type="hidden" id="setupDeviceId">
+    <label>Phone model<input id="setupDeviceModel" placeholder="e.g. iPhone 17 Pro Max" required><small>This must match the phone-model wording used on compatible products.</small></label>
+    <label>Central phone image<input id="setupDeviceImage" type="file" accept="image/png,image/webp,image/jpeg"><small>Use PNG/WebP now. This is the fallback whenever no complete 3D setup is available.</small></label>
+    <label>Optional real 3D phone model<input id="setupDeviceModel3d" type="file" accept=".glb,model/gltf-binary"><small>Optional GLB file. If present, Setup Studio can use true 3D when selected accessories also have GLB models.</small></label>
+    <div class="current-image setup-current-image" id="currentSetupDeviceImage"></div>
+    <div class="two"><label>Display order<input id="setupDeviceOrder" type="number" min="0" value="0"></label><label class="option-toggle"><input id="setupDeviceActive" type="checkbox" checked><span><strong>Active</strong></span></label></div>
+    <button class="gold-btn full" type="submit">Save phone render</button><div class="message" id="setupDeviceMsg"></div>
+  </form>
+</div>
+
+<div class="admin-modal" id="setupRenderEditor">
+  <form class="editor-card" id="setupRenderForm">
+    <div class="editor-head"><div><span class="eyebrow">SETUP STUDIO</span><h2 id="setupRenderEditorTitle">Add accessory render</h2></div><button type="button" class="xbtn" data-close="setupRenderEditor">×</button></div>
+    <input type="hidden" id="setupRenderId">
+    <div class="two"><label>Product<select id="setupRenderProduct" required></select></label><label>Phone<select id="setupRenderDevice" required></select></label></div>
+    <div class="two"><label>Accessory type<select id="setupRenderSlot"><option value="case">Case</option><option value="screen">Screen protector</option><option value="camera">Camera protector</option><option value="charger">Charging</option><option value="other">Other</option></select></label><label>Layer depth<input id="setupRenderZ" type="number" value="10"></label></div>
+    <label>Transparent product render<input id="setupRenderImage" type="file" accept="image/png,image/webp,image/jpeg"><small>Recommended now: real transparent PNG/WebP aligned to the phone. This always works as the fallback.</small></label>
+    <label>Optional real 3D product model<input id="setupRenderModel3d" type="file" accept=".glb,model/gltf-binary"><small>Optional GLB. When the phone and every selected accessory have 3D models, the customer gets true drag-to-rotate 3D automatically.</small></label>
+    <div class="two"><label>3D X<input id="setupRender3dX" type="number" step="0.01" value="0"></label><label>3D Y<input id="setupRender3dY" type="number" step="0.01" value="0"></label></div>
+    <div class="two"><label>3D Z<input id="setupRender3dZ" type="number" step="0.01" value="0"></label><label>3D scale<input id="setupRender3dScale" type="number" step="0.01" min="0.01" value="1"></label></div>
+    <div class="three"><label>Rotate X°<input id="setupRender3dRotX" type="number" step="1" value="0"></label><label>Rotate Y°<input id="setupRender3dRotY" type="number" step="1" value="0"></label><label>Rotate Z°<input id="setupRender3dRotZ" type="number" step="1" value="0"></label></div>
+    <div class="current-image setup-current-image" id="currentSetupRenderImage"></div>
+    <div class="three setup-placement">
+      <label>X position %<input id="setupRenderX" type="number" step="0.1" value="50"></label>
+      <label>Y position %<input id="setupRenderY" type="number" step="0.1" value="50"></label>
+      <label>Scale %<input id="setupRenderScale" type="number" step="0.1" min="1" value="100"></label>
+    </div>
+    <label class="option-toggle"><input id="setupRenderActive" type="checkbox" checked><span><strong>Active</strong></span></label>
+    <button class="gold-btn full" type="submit">Save accessory render</button><div class="message" id="setupRenderMsg"></div>
   </form>
 </div>
 
