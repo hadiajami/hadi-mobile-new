@@ -20,6 +20,7 @@ const esc=(s="")=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"
 
 injectStoreEnhancementStyles();
 fixWhatsAppIcon();
+initFloatingHelp();
 
 async function load(){
   if(!sb){
@@ -47,6 +48,7 @@ async function load(){
     renderHomePromos();
     renderHomeMerchandising();
     renderHomeBrands();
+    renderHomeTrustSection();
     initPhoneFinder();
     initHomeSearch();
     initHeroScrollAnimation();
@@ -158,6 +160,77 @@ function renderHomeBrands(){
   if(!visible.length){section.innerHTML="";return;}
   section.innerHTML=`<div class="section-head reveal"><div><span class="eyebrow">SHOP BY BRAND</span><h2>Find your favorite brand.</h2></div></div><div class="home-brand-track">${visible.map(({brand,count},i)=>`<a class="home-brand-card reveal" style="--delay:${i*70}ms" href="categories.html?brand=${encodeURIComponent(brand.id)}"><span class="home-brand-mark">${esc(brand.name).slice(0,1).toUpperCase()}</span><strong>${esc(brand.name)}</strong><small>${count} ${count===1?"product":"products"}</small><span class="home-brand-arrow">→</span></a>`).join("")}</div>`;
   observeReveals(section);
+}
+
+
+function renderHomeTrustSection(){
+  if(PAGE!=="home")return;
+  let section=$("#hadiTrustSection");
+  if(!section){
+    section=document.createElement("section");
+    section.id="hadiTrustSection";
+    section.className="section hadi-trust-section reveal";
+    const main=document.querySelector("main");
+    if(main)main.appendChild(section);else return;
+  }
+  const visibleBrands=brands.filter(b=>products.some(p=>String(p.brand_id)===String(b.id)));
+  section.innerHTML=`
+    <div class="hadi-trust-intro reveal">
+      <span class="eyebrow">WHY HADI MOBILE</span>
+      <h2>Tech shopping, made simpler.</h2>
+      <p>Phones, accessories and everyday tech in one clean experience — with helpful support whenever you need it.</p>
+    </div>
+    <div class="hadi-trust-grid">
+      <article class="hadi-trust-item reveal" style="--delay:60ms">
+        <span class="hadi-trust-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.7 3.2 8.7 7.5 9.8 4.3-1.1 7.5-5.1 7.5-9.8V6L12 3Zm-3 9 2 2 4-4"/></svg></span>
+        <strong>Carefully selected products</strong>
+        <small>A focused selection of phones, accessories and smart essentials.</small>
+      </article>
+      <article class="hadi-trust-item reveal" style="--delay:130ms">
+        <span class="hadi-trust-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 3V5Zm4 5h8M8 8h8"/></svg></span>
+        <strong>Helpful WhatsApp support</strong>
+        <small>Ask about a product or your order without leaving the shopping flow.</small>
+      </article>
+      <article class="hadi-trust-item reveal" style="--delay:200ms">
+        <span class="hadi-trust-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3V6Zm11 3h3l4 4v3h-7V9ZM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg></span>
+        <strong>Delivery across Lebanon</strong>
+        <small>Order online and continue directly with HADI MOBILE on WhatsApp.</small>
+      </article>
+    </div>
+    ${visibleBrands.length?`<div class="hadi-info-accordion reveal">
+      <button class="hadi-info-toggle" type="button" aria-expanded="false">
+        <span><small>EXPLORE</small><strong>Brands</strong></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="hadi-info-panel" hidden>
+        <div class="hadi-brand-list">${visibleBrands.map(b=>`<a href="categories.html?brand=${encodeURIComponent(b.id)}">${esc(b.name)}<span>→</span></a>`).join("")}</div>
+      </div>
+    </div>`:""}`;
+  const toggle=section.querySelector(".hadi-info-toggle");
+  const panel=section.querySelector(".hadi-info-panel");
+  if(toggle&&panel){
+    toggle.addEventListener("click",()=>{
+      const open=toggle.getAttribute("aria-expanded")==="true";
+      toggle.setAttribute("aria-expanded",String(!open));
+      panel.hidden=open;
+    });
+  }
+  observeReveals(section);
+}
+
+function initFloatingHelp(){
+  if(!CFG?.WHATSAPP_NUMBER||document.querySelector("#floatingWhatsAppHelp"))return;
+  const wrap=document.createElement("div");
+  wrap.id="floatingWhatsAppHelp";
+  wrap.className="floating-wa-help";
+  wrap.innerHTML=`<span class="floating-wa-label">Need help? <strong>Chat with us</strong></span><button class="floating-wa-btn" type="button" aria-label="Chat with HADI MOBILE on WhatsApp"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a13 13 0 0 0-11.15 19.7L3.1 29l6.47-1.7A13 13 0 1 0 16 3Zm0 23.6c-2.04 0-4.03-.55-5.76-1.6l-.41-.24-3.84 1.01 1.03-3.74-.27-.43A10.6 10.6 0 1 1 16 26.6Zm5.82-7.93c-.32-.16-1.88-.93-2.17-1.03-.29-.11-.5-.16-.71.16-.21.32-.82 1.03-1 1.24-.18.21-.37.24-.69.08-.32-.16-1.35-.5-2.57-1.59-.95-.85-1.59-1.89-1.78-2.21-.18-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.19.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.71-1.72-.98-2.35-.26-.62-.52-.54-.71-.55h-.61c-.21 0-.56.08-.85.4-.29.32-1.11 1.08-1.11 2.64 0 1.56 1.14 3.07 1.3 3.28.16.21 2.24 3.42 5.43 4.8.76.33 1.35.52 1.81.67.76.24 1.45.21 2 .13.61-.09 1.88-.77 2.14-1.51.26-.74.26-1.37.18-1.51-.08-.13-.29-.21-.61-.37Z"/></svg></button>`;
+  document.body.appendChild(wrap);
+  const openChat=()=>{
+    const msg="Hello HADI MOBILE 👋\n\nI need some help.";
+    window.open(`https://wa.me/${CFG.WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`,"_blank");
+  };
+  wrap.querySelector(".floating-wa-btn")?.addEventListener("click",openChat);
+  wrap.querySelector(".floating-wa-label")?.addEventListener("click",openChat);
 }
 
 function initHomeSearch(){
@@ -644,7 +717,21 @@ function injectStoreEnhancementStyles(){
     .product-card.is-visible{animation:cardSettle .55s cubic-bezier(.2,.8,.2,1) both}
     @keyframes cardSettle{0%{filter:blur(2px)}100%{filter:blur(0)}}
 
+
+    /* V4 floating WhatsApp help */
+    .floating-wa-help{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));z-index:8500;display:flex;align-items:center;gap:10px;filter:drop-shadow(0 14px 28px rgba(11,37,76,.18));animation:waFloatIn .5s cubic-bezier(.2,.85,.2,1) both}
+    .floating-wa-label{cursor:pointer;background:rgba(255,255,255,.96);color:#526071;border:1px solid rgba(10,31,68,.08);border-radius:14px;padding:11px 14px;font-size:.72rem;white-space:nowrap;box-shadow:0 10px 30px rgba(25,55,100,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.floating-wa-label strong{color:#0a1f44}
+    .floating-wa-btn{position:relative;width:58px;height:58px;border:0;border-radius:50%;display:grid;place-items:center;background:#25d366;color:#fff;cursor:pointer;box-shadow:0 12px 30px rgba(37,211,102,.28);transition:transform .22s ease,box-shadow .22s ease}.floating-wa-btn:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 16px 36px rgba(37,211,102,.36)}.floating-wa-btn:active{transform:scale(.94)}.floating-wa-btn:before{content:"";position:absolute;inset:-6px;border:2px solid rgba(37,211,102,.26);border-radius:50%;animation:waPulse 2.6s ease-out infinite}.floating-wa-btn svg{width:31px;height:31px;fill:currentColor}
+    @keyframes waPulse{0%{transform:scale(.82);opacity:.8}70%,100%{transform:scale(1.28);opacity:0}}@keyframes waFloatIn{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
+
+    /* V4 trust / info section inspired by the reference but kept in HADI MOBILE style */
+    .hadi-trust-section{padding-top:34px!important;padding-bottom:42px!important}.hadi-trust-intro{text-align:center;max-width:760px;margin:0 auto 34px}.hadi-trust-intro h2{font-size:clamp(2rem,5vw,3.6rem);line-height:1.04;color:#0a1f44;margin:9px 0 14px}.hadi-trust-intro p{max-width:680px;margin:0 auto;color:#718096;line-height:1.8;font-size:clamp(.88rem,2vw,1.05rem)}
+    .hadi-trust-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.hadi-trust-item{position:relative;overflow:hidden;text-align:center;min-height:220px;border-radius:26px;padding:28px 22px;background:linear-gradient(145deg,#fff,#f6f9ff);border:1px solid rgba(39,111,218,.1);box-shadow:0 16px 44px rgba(28,67,121,.06)}.hadi-trust-item:after{content:"";position:absolute;width:130px;height:130px;border-radius:50%;background:radial-gradient(circle,rgba(64,183,255,.11),transparent 70%);right:-50px;top:-50px;animation:trustGlow 5.5s ease-in-out infinite alternate}.hadi-trust-icon{position:relative;z-index:1;width:56px;height:56px;border-radius:18px;margin:0 auto 18px;display:grid;place-items:center;background:linear-gradient(135deg,#dff8ff,#eeeaff);color:#246fff;box-shadow:0 10px 24px rgba(48,111,222,.1);animation:trustIconFloat 4s ease-in-out infinite}.hadi-trust-icon svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.hadi-trust-item strong{position:relative;z-index:1;display:block;color:#0a1f44;font-size:1rem;margin-bottom:8px}.hadi-trust-item small{position:relative;z-index:1;display:block;color:#7b8799;line-height:1.6;font-size:.7rem}
+    .hadi-info-accordion{margin-top:18px;border-radius:24px;background:#fff;border:1px solid rgba(10,31,68,.08);box-shadow:0 16px 44px rgba(28,67,121,.05);overflow:hidden}.hadi-info-toggle{width:100%;border:0;background:transparent;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;text-align:left;color:#0a1f44;cursor:pointer}.hadi-info-toggle span{display:flex;flex-direction:column;gap:3px}.hadi-info-toggle small{font-size:.55rem;letter-spacing:.16em;color:#4aa8ff;font-weight:900}.hadi-info-toggle strong{font-size:1.05rem}.hadi-info-toggle svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:2;transition:transform .28s ease}.hadi-info-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}.hadi-info-panel{border-top:1px solid rgba(10,31,68,.06);padding:8px 18px 18px}.hadi-brand-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.hadi-brand-list a{display:flex;align-items:center;justify-content:space-between;text-decoration:none;color:#0a1f44;background:#f7faff;border-radius:14px;padding:13px 14px;font-size:.72rem;font-weight:800;transition:transform .2s ease,background .2s ease}.hadi-brand-list a:hover{transform:translateX(3px);background:#eef6ff}.hadi-brand-list a span{color:#246fff}
+    @keyframes trustIconFloat{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-6px) rotate(1.5deg)}}@keyframes trustGlow{to{transform:translate(-16px,18px) scale(1.15)}}
     @media(max-width:700px){
+      .floating-wa-help{right:max(14px,env(safe-area-inset-right));bottom:calc(82px + env(safe-area-inset-bottom))}.floating-wa-label{display:none}.floating-wa-btn{width:54px;height:54px}.floating-wa-btn svg{width:29px;height:29px}
+      .hadi-trust-section{padding-top:26px!important}.hadi-trust-intro{margin-bottom:24px}.hadi-trust-grid{grid-template-columns:1fr;gap:12px}.hadi-trust-item{min-height:0;padding:22px 18px}.hadi-trust-icon{width:52px;height:52px;margin-bottom:14px}.hadi-brand-list{grid-template-columns:1fr}
       .home-brand-card{flex-basis:145px;min-height:132px;padding:15px}.phone-finder-card{border-radius:22px;padding:22px}.phone-finder-control{align-items:stretch;flex-direction:column}.phone-finder-control .text-btn{align-self:flex-start}
       .home-promo-section{padding:18px 16px 8px!important}.home-promo-shell{border-radius:24px}.home-promo-card{aspect-ratio:4/5!important;border-radius:24px!important}.home-promo-shade{background:linear-gradient(0deg,rgba(3,18,43,.66),rgba(3,18,43,.02) 70%)}.home-promo-copy h2{font-size:1.8rem}
       #productModal.modal{padding:max(16px,env(safe-area-inset-top)) 14px max(16px,env(safe-area-inset-bottom))!important}
