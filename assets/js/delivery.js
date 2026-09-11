@@ -41,6 +41,46 @@
     return Object.fromEntries(["fullName","phone","governorate","area","street","building","floor","landmark","note"].map(id=>[id,$("#"+id)?.value.trim()||""]));
   }
 
+
+  function normalizeWhatsAppNumber(value){
+    let n=String(value||"").replace(/\D/g,"");
+    if(n.startsWith("00"))n=n.slice(2);
+    if(n.startsWith("0"))n="961"+n.slice(1);
+    return n;
+  }
+
+  function buildWhatsAppOrderMessage(code,d,pay){
+    const lines=[
+      `🛍️ *HADI MOBILE ORDER*`,
+      `Order: *${code}*`,
+      ``,
+      `👤 *Customer*`,
+      `${d.fullName}`,
+      `📱 ${d.phone}`,
+      ``,
+      `📦 *Items*`
+    ];
+    cart.forEach((i,index)=>{
+      lines.push(`${index+1}. ${i.name} ×${Number(i.qty||1)} — ${money(Number(i.price||0)*Number(i.qty||1))}`);
+      if(i.phone_model)lines.push(`   Model: ${i.phone_model}`);
+      if(i.color_name)lines.push(`   Color: ${i.color_name}`);
+    });
+    lines.push(``,`💰 *Subtotal:* ${money(total)}`);
+    lines.push(`💳 *Payment:* ${pay}`);
+    if(pay==='Whish Money'){
+      lines.push(`✅ Customer confirmed Whish payment`);
+      const ref=$("#whishRef")?.value.trim();
+      if(ref)lines.push(`Reference: ${ref}`);
+      lines.push(`⚠️ Payment pending HADI MOBILE verification`);
+    }
+    lines.push(``,`📍 *Delivery address*`,`Governorate: ${d.governorate}`,`Area: ${d.area}`,`Street: ${d.street}`,`Building: ${d.building}`);
+    if(d.floor)lines.push(`Floor / Apartment: ${d.floor}`);
+    if(d.landmark)lines.push(`Landmark: ${d.landmark}`);
+    if(d.note)lines.push(`Delivery note: ${d.note}`);
+    lines.push(``,`🚚 Delivery fee to be confirmed by HADI MOBILE.`);
+    return lines.join("\n");
+  }
+
   function updateButtonState(){
     const pay=document.querySelector('input[name="payment"]:checked')?.value||"Cash on Delivery";
     const btn=$("#confirmOrder");
@@ -73,6 +113,10 @@
       toast("Checkout is not connected yet. Please check the website configuration.");
       return;
     }
+
+    // Open a blank customer-initiated tab now so iPhone/Safari does not block WhatsApp after the async save.
+    let waWindow=null;
+    try{waWindow=window.open("about:blank","_blank");}catch{}
 
     btn.disabled=true;
     const original=btn.textContent;
@@ -119,11 +163,20 @@
       try{data=raw?JSON.parse(raw):{};}catch{}
       if(!res.ok)throw new Error(data?.message||data?.error||raw||"Could not place order");
 
-      localStorage.removeItem("hadi_cart");
       const code=data?.order_code||data?.code||"received";
-      root.innerHTML=`<div class="card empty-cart" style="max-width:620px;margin:30px auto;text-align:center"><div style="font-size:2.4rem">✓</div><div class="eyebrow" style="margin-top:8px">ORDER RECEIVED</div><h2 style="font-size:1.5rem">Thank you, ${esc(d.fullName)}.</h2><p>Your order <strong>${esc(code)}</strong> has been received by HADI MOBILE.</p><p>${pay==='Whish Money'?"Your Whish payment will be verified before the order is finalized.":"You selected Cash on Delivery."}</p><p>We’ll contact you if anything is needed and to confirm the delivery fee.</p><a href="index.html">Back to shop</a></div>`;
+      const hadiNumber=normalizeWhatsAppNumber(CFG.WHATSAPP_NUMBER||"96176150404");
+      const waText=buildWhatsAppOrderMessage(code,d,pay);
+      const waUrl=`https://wa.me/${hadiNumber}?text=${encodeURIComponent(waText)}`;
+      localStorage.removeItem("hadi_cart");
+
+      if(waWindow){
+        try{waWindow.location.href=waUrl;}catch{}
+      }
+
+      root.innerHTML=`<div class="card empty-cart" style="max-width:650px;margin:30px auto;text-align:center"><div style="font-size:2.4rem">✓</div><div class="eyebrow" style="margin-top:8px">ORDER RECEIVED</div><h2 style="font-size:1.5rem">Thank you, ${esc(d.fullName)}.</h2><p>Your order <strong>${esc(code)}</strong> is saved in HADI MOBILE Admin.</p><p>${pay==='Whish Money'?"Your Whish payment is marked as customer-confirmed and will be verified by HADI MOBILE.":"You selected Cash on Delivery."}</p><p>WhatsApp has been prepared with your full order and delivery details. <strong>Tap Send in WhatsApp</strong> so HADI MOBILE also receives the confirmation directly from you.</p><a href="${waUrl}" target="_blank" rel="noopener" style="display:inline-block;margin:10px 6px 0;background:#20c96b">Send order on WhatsApp</a><a href="index.html" style="margin-left:6px">Back to shop</a></div>`;
       window.scrollTo({top:0,behavior:"smooth"});
     }catch(err){
+      try{if(waWindow&&!waWindow.closed)waWindow.close();}catch{}
       console.error(err);
       toast("We couldn't place the order. Please try again.");
       btn.disabled=false;
