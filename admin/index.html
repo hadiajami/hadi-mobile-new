@@ -15,15 +15,24 @@
 <main class="admin-shell">
   <section class="admin-title"><span class="eyebrow">CONTROL CENTER</span><h1>Store Manager</h1><p>Edit the shop without touching code.</p></section>
   <div class="stats" id="stats"></div>
-  <div class="tabs"><button class="tab active" data-tab="products">Products</button><button class="tab" data-tab="categories">Categories</button></div>
+  <div class="tabs">
+    <button class="tab active" data-tab="products">Products</button>
+    <button class="tab" data-tab="homepage">Homepage</button>
+    <button class="tab" data-tab="categories">Categories</button>
+  </div>
 
   <section id="productsTab" class="tab-panel">
     <div class="panel-head"><div><h2>Products</h2><p>Add, edit, remove and feature products.</p></div><button class="gold-btn" id="newProduct">+ Add product</button></div>
     <div class="admin-list" id="productList"></div>
   </section>
 
+  <section id="homepageTab" class="tab-panel hidden">
+    <div class="panel-head"><div><h2>Homepage promos</h2><p>New arrivals, preorders and special offers.</p></div><button class="gold-btn" id="newPromo">+ Add promo</button></div>
+    <div class="admin-list" id="promoList"></div>
+  </section>
+
   <section id="categoriesTab" class="tab-panel hidden">
-    <div class="panel-head"><div><h2>Categories</h2><p>Create categories and subcategories. Everything is editable.</p></div><button class="gold-btn" id="newCategory">+ Add category</button></div>
+    <div class="panel-head"><div><h2>Categories</h2><p>Create categories and subcategories.</p></div><button class="gold-btn" id="newCategory">+ Add category</button></div>
     <div class="admin-list" id="categoryAdminList"></div>
   </section>
 </main>
@@ -35,8 +44,12 @@
     <label>Product name<input id="productName" required></label>
     <div class="two"><label>Price (USD)<input id="productPrice" type="number" min="0" step="0.01" required></label><label>Category<select id="productCategory" required></select></label></div>
     <label>Description<textarea id="productDescription" rows="4"></textarea></label>
-    <label>Product image<input id="productImage" type="file" accept="image/*"><small>Upload JPG, PNG or WebP.</small></label>
-    <div class="current-image" id="currentImage"></div>
+
+    <div class="admin-subsection">
+      <div class="admin-subsection-head"><div><strong>Product photos</strong><small>Add one or many images.</small></div></div>
+      <label>Upload images<input id="productImages" type="file" accept="image/*" multiple></label>
+      <div id="imageManager" class="image-manager"></div>
+    </div>
 
     <div class="checks" id="standardStockChecks">
       <label><input id="productStock" type="checkbox" checked> In stock</label>
@@ -44,29 +57,44 @@
       <label><input id="productActive" type="checkbox" checked> Active</label>
     </div>
 
-    <div class="phone-options-toggle">
-      <label class="phone-toggle-label">
-        <input id="productHasPhoneOptions" type="checkbox">
-        <span>
-          <strong>Available for multiple phone models</strong>
-          <small>Use this for cases, screen protectors, cables/adapters, mounts or any product whose availability depends on the customer's phone.</small>
-        </span>
-      </label>
-    </div>
+    <div class="admin-subsection">
+      <div class="admin-subsection-head"><div><strong>Other options</strong></div></div>
 
-    <div class="phone-options-drawer hidden" id="phoneOptionsDrawer">
-      <div class="phone-options-head">
-        <div>
-          <strong>Phone model availability</strong>
-          <small>Add each supported phone and mark whether that exact model is currently available.</small>
-        </div>
-        <button class="mini-btn" id="addPhoneOption" type="button">+ Add phone</button>
+      <label class="option-toggle">
+        <input id="productHasPhoneOptions" type="checkbox">
+        <span><strong>Available for multiple phone models</strong></span>
+      </label>
+      <div class="option-drawer hidden" id="phoneOptionsDrawer">
+        <div class="drawer-head"><strong>Phone model availability</strong><button class="mini-btn" id="addPhoneOption" type="button">+ Add phone</button></div>
+        <div id="phoneOptionsRows"></div>
       </div>
-      <div id="phoneOptionsRows"></div>
-      <div class="phone-options-note">For configurable products, the main “In stock” status is calculated automatically from these phone rows.</div>
+
+      <label class="option-toggle">
+        <input id="productHasColors" type="checkbox">
+        <span><strong>Color variants</strong></span>
+      </label>
+      <div class="option-drawer hidden" id="colorOptionsDrawer">
+        <div class="drawer-head"><strong>Colors</strong><button class="mini-btn" id="addColorOption" type="button">+ Add color</button></div>
+        <div id="colorOptionsRows"></div>
+      </div>
     </div>
 
     <button class="gold-btn full" type="submit">Save product</button><div class="message" id="productMsg"></div>
+  </form>
+</div>
+
+<div class="admin-modal" id="promoEditor">
+  <form class="editor-card" id="promoForm">
+    <div class="editor-head"><div><span class="eyebrow">HOMEPAGE</span><h2 id="promoEditorTitle">Add promo</h2></div><button type="button" class="xbtn" data-close="promoEditor">×</button></div>
+    <input type="hidden" id="promoId">
+    <label>Promo image<input id="promoImage" type="file" accept="image/*"></label>
+    <div class="current-image" id="currentPromoImage"></div>
+    <label class="option-toggle"><input id="promoShowTitle" type="checkbox" checked><span><strong>Show title</strong></span></label>
+    <label>Title<input id="promoTitle" placeholder="e.g. iPhone 17 Pro — Preorder now"></label>
+    <label>Button text<input id="promoButtonText" value="Shop now"></label>
+    <label>Product<select id="promoProduct" required></select></label>
+    <div class="checks"><label><input id="promoActive" type="checkbox" checked> Active</label></div>
+    <button class="gold-btn full" type="submit">Save promo</button><div class="message" id="promoMsg"></div>
   </form>
 </div>
 
