@@ -68,6 +68,33 @@ function render(){
     return `<div class="admin-row"><img src="${pr.image_url||"../assets/img/hadi-mobile-logo.jpg"}"><div class="row-main"><strong>${esc(pr.show_title?pr.title||"Untitled promo":"Image promo")}</strong><span>${esc(p?.name||"No product")}${pr.is_active?" · Active":" · Hidden"}</span></div><div class="row-actions"><button class="mini-btn" data-editpromo="${pr.id}">Edit</button><button class="mini-btn danger" data-delpromo="${pr.id}">Delete</button></div></div>`;
   }).join(""):`<div class="empty-admin">No homepage promos yet.</div>`;
 
+  const merch=$("#homepageMerchList");
+  if(merch){
+    merch.innerHTML=products.length?products.map(p=>{
+      const status=p.availability_status||"standard";
+      return `<div class="homepage-merch-row">
+        <img src="${p.image_url||imagesFor(p.id)[0]?.image_url||"../assets/img/hadi-mobile-logo.jpg"}" alt="">
+        <div class="homepage-merch-main">
+          <strong>${esc(p.name)}</strong>
+          <select class="quick-status" data-quick-status="${p.id}">
+            <option value="standard" ${status==="standard"?"selected":""}>Standard</option>
+            <option value="preorder" ${status==="preorder"?"selected":""}>Preorder</option>
+            <option value="coming_soon" ${status==="coming_soon"?"selected":""}>Coming soon</option>
+          </select>
+        </div>
+        <label class="merch-check"><input type="checkbox" data-merch="${p.id}" data-field="is_new_arrival" ${p.is_new_arrival?"checked":""}>New</label>
+        <label class="merch-check"><input type="checkbox" data-merch="${p.id}" data-field="is_trending" ${p.is_trending?"checked":""}>Trending</label>
+        <label class="merch-check"><input type="checkbox" data-merch="${p.id}" data-field="featured" ${p.featured?"checked":""}>Featured</label>
+      </div>`;
+    }).join(""):`<div class="empty-admin">Add products first.</div>`;
+  }
+
+  const brandPreview=$("#homepageBrandPreview");
+  if(brandPreview){
+    const visibleBrands=brands.map(b=>({b,count:products.filter(p=>p.is_active!==false&&String(p.brand_id)===String(b.id)).length})).filter(x=>x.count);
+    brandPreview.innerHTML=visibleBrands.length?visibleBrands.map(x=>`<span class="brand-preview-chip">${esc(x.b.name)} <b>${x.count}</b></span>`).join(""):`<div class="empty-admin">Assign a brand to at least one active product and it will appear here automatically.</div>`;
+  }
+
   $("#categoryAdminList").innerHTML=categories.map(c=>`<div class="admin-row"><div class="cat-icon">${c.parent_id?"↳":"# "}</div><div class="row-main"><strong>${esc(c.name)}</strong><span>${c.parent_id?"Subcategory of "+esc(categories.find(x=>x.id===c.parent_id)?.name||"Unknown"):"Main category"} · Order ${c.sort_order||0}</span></div><div class="row-actions"><button class="mini-btn" data-editc="${c.id}">Edit</button><button class="mini-btn danger" data-delc="${c.id}">Delete</button></div></div>`).join("");
 
   $("#brandList").innerHTML=brands.length?brands.map(b=>`<div class="admin-row"><div class="cat-icon">B</div><div class="row-main"><strong>${esc(b.name)}</strong><span>Order ${b.sort_order||0} · ${products.filter(p=>String(p.brand_id)===String(b.id)).length} products</span></div><div class="row-actions"><button class="mini-btn" data-editbrand="${b.id}">Edit</button><button class="mini-btn danger" data-delbrand="${b.id}">Delete</button></div></div>`).join(""):`<div class="empty-admin">No brands yet.</div>`;
@@ -95,6 +122,8 @@ function bind(){
   document.querySelectorAll("[data-delbrand]").forEach(b=>b.onclick=()=>deleteBrand(b.dataset.delbrand));
   document.querySelectorAll("[data-toggle-request]").forEach(b=>b.onclick=()=>toggleRequest(b.dataset.toggleRequest));
   document.querySelectorAll("[data-delrequest]").forEach(b=>b.onclick=()=>deleteRequest(b.dataset.delrequest));
+  document.querySelectorAll("[data-merch]").forEach(i=>i.onchange=()=>quickMerchUpdate(i.dataset.merch,i.dataset.field,i.checked,i));
+  document.querySelectorAll("[data-quick-status]").forEach(s=>s.onchange=()=>quickStatusUpdate(s.dataset.quickStatus,s.value,s));
 }
 
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
@@ -228,6 +257,21 @@ $("#categoryForm").addEventListener("submit",async e=>{
   e.preventDefault();const msg=$("#categoryMsg");msg.textContent="Saving...";const id=$("#categoryId").value;const payload={name:$("#categoryName").value.trim(),slug:slugify($("#categoryName").value),parent_id:$("#categoryParent").value||null,sort_order:Number($("#categoryOrder").value||0)};const r=id?await sb.from("categories").update(payload).eq("id",id):await sb.from("categories").insert(payload);if(r.error){msg.textContent=r.error.message;return;}$("#categoryEditor").classList.remove("open");msg.textContent="";await reload();
 });
 
+async function quickMerchUpdate(id,field,value,el){
+  el.disabled=true;
+  const r=await sb.from("products").update({[field]:value}).eq("id",id);
+  if(r.error){alert(r.error.message);el.checked=!value;}
+  else{const p=products.find(x=>String(x.id)===String(id));if(p)p[field]=value;}
+  el.disabled=false;
+}
+async function quickStatusUpdate(id,value,el){
+  el.disabled=true;
+  const r=await sb.from("products").update({availability_status:value}).eq("id",id);
+  if(r.error){alert(r.error.message);}
+  else{const p=products.find(x=>String(x.id)===String(id));if(p)p.availability_status=value;}
+  el.disabled=false;
+}
+
 async function deleteProduct(id){if(!confirm("Delete this product?"))return;const r=await sb.from("products").delete().eq("id",id);if(r.error)alert(r.error.message);else await reload();}
 async function deletePromo(id){if(!confirm("Delete this homepage promo?"))return;const r=await sb.from("home_promotions").delete().eq("id",id);if(r.error)alert(r.error.message);else await reload();}
 async function deleteCategory(id){if(!confirm("Delete this category? Products inside it must be moved or deleted first."))return;const r=await sb.from("categories").delete().eq("id",id);if(r.error)alert(r.error.message);else await reload();}
@@ -238,6 +282,6 @@ $("#logoutBtn").onclick=async()=>{await sb.auth.signOut();location.href="login.h
 
 function injectAdminEnhancementStyles(){
   const style=document.createElement("style");style.textContent=`
-  .admin-subsection{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:18px;background:#fbfdff}.admin-subsection-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.admin-subsection-head strong{font-size:.82rem}.admin-subsection-head small{display:block;color:var(--muted);font-size:.64rem;margin-top:3px}.option-toggle{display:flex!important;align-items:center;gap:10px;margin:8px 0!important;padding:12px;border-radius:14px;background:linear-gradient(145deg,#f7fbff,#f6f2ff);cursor:pointer}.option-toggle input{width:auto!important;margin:0!important}.option-toggle strong{font-size:.76rem}.option-drawer{margin:6px 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff}.drawer-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.drawer-head strong{font-size:.74rem}#phoneOptionsRows,#colorOptionsRows{display:grid;gap:8px}.phone-option-row,.color-option-row{display:grid;grid-template-columns:minmax(0,1fr) auto 34px;gap:7px;align-items:center;padding:8px;border-radius:13px;background:#fff;border:1px solid var(--line)}.color-option-row{grid-template-columns:46px minmax(0,1fr) 34px}.color-swatch-input{width:42px!important;height:38px!important;padding:2px!important;border-radius:10px!important}.phone-model-input,.color-name-input{margin:0!important;padding:10px!important}.phone-stock-switch{display:flex!important;align-items:center;gap:5px;margin:0!important;white-space:nowrap;font-size:.64rem!important}.phone-stock-switch input{width:auto!important;margin:0!important}.phone-remove-btn{width:32px;height:32px;border:1px solid #f0c9c9;background:#fff6f6;color:#d85252;border-radius:9px;font-size:1.1rem}.image-manager{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;margin-top:10px}.image-item{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}.image-item>img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}.image-item-controls{display:grid;gap:6px;padding:8px}.image-item-controls select{width:100%;padding:8px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit;font-size:.64rem}.cover-choice{display:flex!important;align-items:center;gap:5px;margin:0!important;font-size:.64rem!important}.cover-choice input{width:auto!important;margin:0!important}.image-remove{border:0;background:#fff0f0;color:#cf4c4c;border-radius:8px;padding:7px;font-size:.62rem;font-weight:800}.image-empty,.empty-admin{padding:16px;color:var(--muted);font-size:.7rem;text-align:center}.current-image img{max-width:180px;border-radius:14px;margin-top:8px}.tabs{overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tab{flex:0 0 auto}.stats{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))!important}@media(max-width:480px){.phone-option-row{grid-template-columns:1fr auto}.phone-remove-btn{grid-column:2}.phone-stock-switch{grid-column:1;grid-row:2}.image-manager{grid-template-columns:repeat(2,1fr)}}`;
+  .admin-subsection{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:18px;background:#fbfdff}.admin-subsection-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.admin-subsection-head strong{font-size:.82rem}.admin-subsection-head small{display:block;color:var(--muted);font-size:.64rem;margin-top:3px}.option-toggle{display:flex!important;align-items:center;gap:10px;margin:8px 0!important;padding:12px;border-radius:14px;background:linear-gradient(145deg,#f7fbff,#f6f2ff);cursor:pointer}.option-toggle input{width:auto!important;margin:0!important}.option-toggle strong{font-size:.76rem}.option-drawer{margin:6px 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff}.drawer-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.drawer-head strong{font-size:.74rem}#phoneOptionsRows,#colorOptionsRows{display:grid;gap:8px}.phone-option-row,.color-option-row{display:grid;grid-template-columns:minmax(0,1fr) auto 34px;gap:7px;align-items:center;padding:8px;border-radius:13px;background:#fff;border:1px solid var(--line)}.color-option-row{grid-template-columns:46px minmax(0,1fr) 34px}.color-swatch-input{width:42px!important;height:38px!important;padding:2px!important;border-radius:10px!important}.phone-model-input,.color-name-input{margin:0!important;padding:10px!important}.phone-stock-switch{display:flex!important;align-items:center;gap:5px;margin:0!important;white-space:nowrap;font-size:.64rem!important}.phone-stock-switch input{width:auto!important;margin:0!important}.phone-remove-btn{width:32px;height:32px;border:1px solid #f0c9c9;background:#fff6f6;color:#d85252;border-radius:9px;font-size:1.1rem}.image-manager{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;margin-top:10px}.image-item{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}.image-item>img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}.image-item-controls{display:grid;gap:6px;padding:8px}.image-item-controls select{width:100%;padding:8px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit;font-size:.64rem}.cover-choice{display:flex!important;align-items:center;gap:5px;margin:0!important;font-size:.64rem!important}.cover-choice input{width:auto!important;margin:0!important}.image-remove{border:0;background:#fff0f0;color:#cf4c4c;border-radius:8px;padding:7px;font-size:.62rem;font-weight:800}.image-empty,.empty-admin{padding:16px;color:var(--muted);font-size:.7rem;text-align:center}.current-image img{max-width:180px;border-radius:14px;margin-top:8px}.tabs{overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tab{flex:0 0 auto}.stats{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))!important}.homepage-merch-list{display:grid;gap:9px}.homepage-merch-row{display:grid;grid-template-columns:54px minmax(0,1fr) auto auto auto;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:15px;background:#fff}.homepage-merch-row>img{width:54px;height:54px;border-radius:12px;object-fit:cover;background:#f4f7fb}.homepage-merch-main{min-width:0}.homepage-merch-main strong{display:block;font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.quick-status{margin-top:5px;width:100%;max-width:170px;padding:7px 8px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit;font-size:.61rem}.merch-check{display:flex!important;align-items:center;gap:5px;margin:0!important;font-size:.61rem!important;font-weight:800;white-space:nowrap}.merch-check input{width:auto!important;margin:0!important}.homepage-brand-preview{display:flex;gap:8px;flex-wrap:wrap}.brand-preview-chip{padding:8px 11px;border-radius:999px;background:linear-gradient(135deg,#eefaff,#f2edff);border:1px solid rgba(45,119,255,.12);font-size:.64rem;font-weight:800;color:#0a1f44}.brand-preview-chip b{color:#1677ff;margin-left:4px}.admin-subsection .gold-btn{flex:0 0 auto}@media(max-width:680px){.homepage-merch-row{grid-template-columns:50px minmax(0,1fr)}.homepage-merch-row>.merch-check{grid-column:auto}.admin-subsection-head{align-items:flex-start}.admin-subsection-head .gold-btn{padding:10px 12px}}@media(max-width:480px){.phone-option-row{grid-template-columns:1fr auto}.phone-remove-btn{grid-column:2}.phone-stock-switch{grid-column:1;grid-row:2}.image-manager{grid-template-columns:repeat(2,1fr)}}`;
   document.head.appendChild(style);
 }
