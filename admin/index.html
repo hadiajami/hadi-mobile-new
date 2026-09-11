@@ -133,6 +133,8 @@
     <div class="editor-head"><div><span class="eyebrow">BRAND</span><h2 id="brandEditorTitle">Add brand</h2></div><button type="button" class="xbtn" data-close="brandEditor">×</button></div>
     <input type="hidden" id="brandId">
     <label>Name<input id="brandName" required></label>
+    <label>Brand icon / logo<input id="brandIcon" type="file" accept="image/*"><small>Upload a square PNG, JPG or WebP. Transparent PNG works best.</small></label>
+    <div class="current-image" id="currentBrandIcon"></div>
     <label>Display order<input id="brandOrder" type="number" min="0" value="0"></label>
     <button class="gold-btn full" type="submit">Save brand</button><div class="message" id="brandMsg"></div>
   </form>
