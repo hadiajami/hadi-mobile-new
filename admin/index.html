@@ -16,7 +16,8 @@
   <section class="admin-title"><span class="eyebrow">CONTROL CENTER</span><h1>Store Manager</h1><p>Edit the shop without touching code.</p></section>
   <div class="stats" id="stats"></div>
   <div class="tabs">
-    <button class="tab active" data-tab="products">Products</button>
+    <button class="tab active" data-tab="orders">Orders</button>
+    <button class="tab" data-tab="products">Products</button>
     <button class="tab" data-tab="homepage">Homepage</button>
     <button class="tab" data-tab="categories">Categories</button>
     <button class="tab" data-tab="brands">Brands</button>
@@ -24,7 +25,12 @@
     <button class="tab" data-tab="requests">Requests</button>
   </div>
 
-  <section id="productsTab" class="tab-panel">
+  <section id="ordersTab" class="tab-panel">
+    <div class="panel-head"><div><h2>Orders</h2><p>All website checkout orders, payment status and delivery details.</p></div></div>
+    <div class="admin-list" id="orderList"></div>
+  </section>
+
+  <section id="productsTab" class="tab-panel hidden">
     <div class="panel-head"><div><h2>Products</h2><p>Add, edit, remove and feature products.</p></div><button class="gold-btn" id="newProduct">+ Add product</button></div>
     <div class="admin-list" id="productList"></div>
   </section>
