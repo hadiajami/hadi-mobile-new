@@ -638,10 +638,9 @@ function closeProduct(){
 }
 function checkout(){
   if(!cart.length)return;
-  const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
-  const lines=cart.map((i,n)=>`${n+1}. ${i.name}${i.phone_model?` — ${i.phone_model}`:""}${i.color_name?` — ${i.color_name}`:""} × ${i.qty} — ${money(i.price*i.qty)}`).join("\n");
-  const msg=`Hello HADI MOBILE 👋\n\nI'd like to place this order:\n\n${lines}\n\nTotal: ${money(total)}\n\nPlease confirm availability and continue the order with me here.`;
-  window.open(`https://wa.me/${CFG.WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`,"_blank");
+  // Checkout is intentionally isolated on its own page.
+  // The cart remains in localStorage and delivery.html reads it safely.
+  window.location.href="delivery.html";
 }
 
 $("#cartButton")?.addEventListener("click",openCart);
@@ -649,6 +648,7 @@ $("#bottomCart")?.addEventListener("click",openCart);
 $("#closeCart")?.addEventListener("click",closeCart);
 $("#sheetBackdrop")?.addEventListener("click",closeCart);
 $("#whatsappCheckout")?.addEventListener("click",checkout);
+if($("#whatsappCheckout"))$("#whatsappCheckout").textContent="Continue to delivery";
 $("#closeProduct")?.addEventListener("click",closeProduct);
 $("#productModal")?.addEventListener("click",e=>{if(e.target===$("#productModal"))closeProduct();});
 
