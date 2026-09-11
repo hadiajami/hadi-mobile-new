@@ -624,11 +624,13 @@ function openCart(){
   $("#cartSheet")?.classList.add("open");
   $("#sheetBackdrop")?.classList.add("open");
   $("#cartSheet")?.setAttribute("aria-hidden","false");
+  $("#floatingWhatsAppHelp")?.classList.add("cart-hidden");
 }
 function closeCart(){
   $("#cartSheet")?.classList.remove("open");
   $("#sheetBackdrop")?.classList.remove("open");
   $("#cartSheet")?.setAttribute("aria-hidden","true");
+  $("#floatingWhatsAppHelp")?.classList.remove("cart-hidden");
 }
 function closeProduct(){
   $("#productModal")?.classList.remove("open");
@@ -636,19 +638,40 @@ function closeProduct(){
   document.documentElement.classList.remove("product-modal-open");
   document.body.classList.remove("product-modal-open");
 }
-function checkout(){
+function checkoutOnline(){
   if(!cart.length)return;
-  // Checkout is intentionally isolated on its own page.
-  // The cart remains in localStorage and delivery.html reads it safely.
+  // Website checkout stays isolated on delivery.html.
   window.location.href="delivery.html";
+}
+function checkoutWhatsApp(){
+  if(!cart.length)return;
+  const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const lines=cart.map((i,n)=>`${n+1}. ${i.name}${i.phone_model?` — ${i.phone_model}`:""}${i.color_name?` — ${i.color_name}`:""} × ${i.qty} — ${money(i.price*i.qty)}`).join("\n");
+  const msg=`Hello HADI MOBILE 👋\n\nI'd like to place this order:\n\n${lines}\n\nTotal: ${money(total)}\n\nPlease confirm availability and continue the order with me here.`;
+  window.open(`https://wa.me/${CFG.WHATSAPP_NUMBER||"96176150404"}?text=${encodeURIComponent(msg)}`,"_blank");
+}
+function setupCartCheckoutChoices(){
+  const online=$("#whatsappCheckout");
+  if(!online)return;
+  online.textContent="Order online • Delivery & payment";
+  online.classList.add("cart-online-checkout");
+  online.addEventListener("click",checkoutOnline);
+  if(!$("#cartWhatsAppCheckout")){
+    const wa=document.createElement("button");
+    wa.id="cartWhatsAppCheckout";
+    wa.type="button";
+    wa.className="cart-whatsapp-checkout";
+    wa.innerHTML=`<span aria-hidden="true">◉</span> Continue on WhatsApp`;
+    wa.addEventListener("click",checkoutWhatsApp);
+    online.insertAdjacentElement("afterend",wa);
+  }
 }
 
 $("#cartButton")?.addEventListener("click",openCart);
 $("#bottomCart")?.addEventListener("click",openCart);
 $("#closeCart")?.addEventListener("click",closeCart);
 $("#sheetBackdrop")?.addEventListener("click",closeCart);
-$("#whatsappCheckout")?.addEventListener("click",checkout);
-if($("#whatsappCheckout"))$("#whatsappCheckout").textContent="Continue to delivery";
+setupCartCheckoutChoices();
 $("#closeProduct")?.addEventListener("click",closeProduct);
 $("#productModal")?.addEventListener("click",e=>{if(e.target===$("#productModal"))closeProduct();});
 
@@ -721,7 +744,7 @@ function injectStoreEnhancementStyles(){
     /* V4 floating WhatsApp help */
     .floating-wa-help{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));z-index:8500;display:flex;align-items:center;gap:10px;filter:drop-shadow(0 14px 28px rgba(11,37,76,.18));animation:waFloatIn .5s cubic-bezier(.2,.85,.2,1) both}
     .floating-wa-label{cursor:pointer;background:rgba(255,255,255,.96);color:#526071;border:1px solid rgba(10,31,68,.08);border-radius:14px;padding:11px 14px;font-size:.72rem;white-space:nowrap;box-shadow:0 10px 30px rgba(25,55,100,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.floating-wa-label strong{color:#0a1f44}
-    .floating-wa-btn{position:relative;width:58px;height:58px;border:0;border-radius:50%;display:grid;place-items:center;background:#25d366;color:#fff;cursor:pointer;box-shadow:0 12px 30px rgba(37,211,102,.28);transition:transform .22s ease,box-shadow .22s ease}.floating-wa-btn:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 16px 36px rgba(37,211,102,.36)}.floating-wa-btn:active{transform:scale(.94)}.floating-wa-btn:before{content:"";position:absolute;inset:-6px;border:2px solid rgba(37,211,102,.26);border-radius:50%;animation:waPulse 2.6s ease-out infinite}.floating-wa-btn svg{width:31px;height:31px;fill:currentColor}
+    .floating-wa-btn{position:relative;width:58px;height:58px;border:0;border-radius:50%;display:grid;place-items:center;background:#25d366;color:#fff;cursor:pointer;box-shadow:0 12px 30px rgba(37,211,102,.28);transition:transform .22s ease,box-shadow .22s ease}.floating-wa-btn:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 16px 36px rgba(37,211,102,.36)}.floating-wa-btn:active{transform:scale(.94)}.floating-wa-btn:before{content:"";position:absolute;inset:-6px;border:2px solid rgba(37,211,102,.26);border-radius:50%;animation:waPulse 2.6s ease-out infinite}.floating-wa-btn svg{width:31px;height:31px;fill:currentColor}.floating-wa-help.cart-hidden{opacity:0!important;pointer-events:none!important;transform:translateY(10px)!important}.cart-online-checkout{background:linear-gradient(135deg,#25c4f2,#3a78ff 50%,#742fe9)!important;color:#fff!important;box-shadow:0 14px 32px rgba(62,91,246,.2)!important}.cart-whatsapp-checkout{width:100%;margin-top:10px;border:1px solid rgba(37,211,102,.45);border-radius:18px;padding:14px 18px;background:#fff;color:#14883b;font:inherit;font-weight:900;font-size:.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}.cart-whatsapp-checkout span{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#25d366;color:#fff;font-size:.8rem}
     @keyframes waPulse{0%{transform:scale(.82);opacity:.8}70%,100%{transform:scale(1.28);opacity:0}}@keyframes waFloatIn{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
 
     /* V4 trust / info section inspired by the reference but kept in HADI MOBILE style */
