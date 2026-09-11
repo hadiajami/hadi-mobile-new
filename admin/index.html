@@ -19,6 +19,8 @@
     <button class="tab active" data-tab="products">Products</button>
     <button class="tab" data-tab="homepage">Homepage</button>
     <button class="tab" data-tab="categories">Categories</button>
+    <button class="tab" data-tab="brands">Brands</button>
+    <button class="tab" data-tab="requests">Requests</button>
   </div>
 
   <section id="productsTab" class="tab-panel">
@@ -35,6 +37,16 @@
     <div class="panel-head"><div><h2>Categories</h2><p>Create categories and subcategories.</p></div><button class="gold-btn" id="newCategory">+ Add category</button></div>
     <div class="admin-list" id="categoryAdminList"></div>
   </section>
+
+  <section id="brandsTab" class="tab-panel hidden">
+    <div class="panel-head"><div><h2>Brands</h2><p>Keep brand filtering clean and easy to manage.</p></div><button class="gold-btn" id="newBrand">+ Add brand</button></div>
+    <div class="admin-list" id="brandList"></div>
+  </section>
+
+  <section id="requestsTab" class="tab-panel hidden">
+    <div class="panel-head"><div><h2>Availability requests</h2><p>Customers waiting for out-of-stock or coming-soon products.</p></div></div>
+    <div class="admin-list" id="requestList"></div>
+  </section>
 </main>
 
 <div class="admin-modal" id="productEditor">
@@ -42,7 +54,9 @@
     <div class="editor-head"><div><span class="eyebrow">PRODUCT</span><h2 id="productEditorTitle">Add product</h2></div><button type="button" class="xbtn" data-close="productEditor">×</button></div>
     <input type="hidden" id="productId">
     <label>Product name<input id="productName" required></label>
-    <div class="two"><label>Price (USD)<input id="productPrice" type="number" min="0" step="0.01" required></label><label>Category<select id="productCategory" required></select></label></div>
+    <div class="two"><label>Selling price (USD)<input id="productPrice" type="number" min="0" step="0.01" required></label><label>Original price — optional<input id="productComparePrice" type="number" min="0" step="0.01" placeholder="Leave empty if not on sale"></label></div>
+    <div class="two"><label>Category<select id="productCategory" required></select></label><label>Brand<select id="productBrand"><option value="">No brand</option></select></label></div>
+    <div class="two"><label>Availability<select id="productStatus"><option value="standard">Standard sale</option><option value="preorder">Preorder</option><option value="coming_soon">Coming soon</option></select></label><label>Availability note — optional<input id="productExpectedDate" placeholder="e.g. Expected late September"></label></div>
     <label>Description<textarea id="productDescription" rows="4"></textarea></label>
 
     <div class="admin-subsection">
@@ -54,6 +68,8 @@
     <div class="checks" id="standardStockChecks">
       <label><input id="productStock" type="checkbox" checked> In stock</label>
       <label><input id="productFeatured" type="checkbox"> Featured</label>
+      <label><input id="productNewArrival" type="checkbox"> New arrival</label>
+      <label><input id="productTrending" type="checkbox"> Trending</label>
       <label><input id="productActive" type="checkbox" checked> Active</label>
     </div>
 
@@ -95,6 +111,16 @@
     <label>Product<select id="promoProduct" required></select></label>
     <div class="checks"><label><input id="promoActive" type="checkbox" checked> Active</label></div>
     <button class="gold-btn full" type="submit">Save promo</button><div class="message" id="promoMsg"></div>
+  </form>
+</div>
+
+<div class="admin-modal" id="brandEditor">
+  <form class="editor-card" id="brandForm">
+    <div class="editor-head"><div><span class="eyebrow">BRAND</span><h2 id="brandEditorTitle">Add brand</h2></div><button type="button" class="xbtn" data-close="brandEditor">×</button></div>
+    <input type="hidden" id="brandId">
+    <label>Name<input id="brandName" required></label>
+    <label>Display order<input id="brandOrder" type="number" min="0" value="0"></label>
+    <button class="gold-btn full" type="submit">Save brand</button><div class="message" id="brandMsg"></div>
   </form>
 </div>
 
