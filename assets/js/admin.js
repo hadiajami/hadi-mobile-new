@@ -2,17 +2,18 @@ const CFG=window.HADI_CONFIG;
 if(!CFG.SUPABASE_URL || CFG.SUPABASE_URL.startsWith("YOUR_")) location.href="login.html";
 const sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
 
-let products=[],categories=[],phoneOptions=[],editingImage=null;
+let products=[],categories=[],phoneOptions=[],productImages=[],productColors=[],promos=[];
+let editingGallery=[],editingPromoImage=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const slugify=s=>s.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const uid=()=>`tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 injectAdminEnhancementStyles();
 
 (async()=>{
   const {data:{session}}=await sb.auth.getSession();
   if(!session){location.href="login.html";return;}
-
   const {data:admin,error:adminError}=await sb.from("admins").select("user_id").eq("user_id",session.user.id).maybeSingle();
   if(adminError || !admin){
     await sb.auth.signOut();
@@ -24,64 +25,48 @@ injectAdminEnhancementStyles();
 })();
 
 async function reload(){
-  const [c,p,o]=await Promise.all([
+  const [c,p,o,i,col,pr]=await Promise.all([
     sb.from("categories").select("*").order("sort_order"),
     sb.from("products").select("*").order("created_at",{ascending:false}),
-    sb.from("product_phone_options").select("*").order("sort_order")
+    sb.from("product_phone_options").select("*").order("sort_order"),
+    sb.from("product_images").select("*").order("sort_order"),
+    sb.from("product_colors").select("*").order("sort_order"),
+    sb.from("home_promotions").select("*").order("sort_order")
   ]);
-
-  if(c.error) console.error("Categories:",c.error);
-  if(p.error) console.error("Products:",p.error);
-  if(o.error) console.error("Phone options:",o.error);
-
-  categories=c.data||[];
-  products=p.data||[];
-  phoneOptions=o.data||[];
+  [c,p,o,i,col,pr].forEach((r,idx)=>{if(r.error)console.error(["Categories","Products","Phone options","Images","Colors","Promos"][idx],r.error);});
+  categories=c.data||[];products=p.data||[];phoneOptions=o.data||[];productImages=i.data||[];productColors=col.data||[];promos=pr.data||[];
   render();
 }
 
-function optionsFor(productId){
-  return phoneOptions.filter(o=>String(o.product_id)===String(productId));
-}
+const optionsFor=id=>phoneOptions.filter(o=>String(o.product_id)===String(id));
+const imagesFor=id=>productImages.filter(o=>String(o.product_id)===String(id));
+const colorsFor=id=>productColors.filter(o=>String(o.product_id)===String(id));
 
 function render(){
   $("#stats").innerHTML=`
     <div class="stat"><strong>${products.length}</strong><span>PRODUCTS</span></div>
-    <div class="stat"><strong>${categories.filter(c=>!c.parent_id).length}</strong><span>MAIN CATEGORIES</span></div>
+    <div class="stat"><strong>${promos.filter(x=>x.is_active).length}</strong><span>ACTIVE PROMOS</span></div>
     <div class="stat"><strong>${products.filter(p=>p.in_stock).length}</strong><span>IN STOCK</span></div>`;
 
   $("#productList").innerHTML=products.map(p=>{
-    const opts=optionsFor(p.id);
-    const optionSummary=p.has_phone_options
-      ? ` · ${opts.filter(o=>o.in_stock).length}/${opts.length} phones available`
-      : (p.in_stock?" · In stock":" · Out of stock");
-
+    const opts=optionsFor(p.id), imgs=imagesFor(p.id), cols=colorsFor(p.id);
+    const stockSummary=p.has_phone_options?` · ${opts.filter(o=>o.in_stock).length}/${opts.length} phones available`:(p.in_stock?" · In stock":" · Out of stock");
     return `<div class="admin-row">
-      <img src="${p.image_url||"../assets/img/hadi-mobile-logo.jpg"}">
-      <div class="row-main">
-        <strong>${esc(p.name)}</strong>
-        <span>$${Number(p.price).toFixed(2)} · ${esc(categories.find(c=>c.id===p.category_id)?.name||"No category")}${p.featured?" · Featured":""}${optionSummary}</span>
-      </div>
-      <div class="row-actions">
-        <button class="mini-btn" data-editp="${p.id}">Edit</button>
-        <button class="mini-btn danger" data-delp="${p.id}">Delete</button>
-      </div>
+      <img src="${p.image_url||imgs[0]?.image_url||"../assets/img/hadi-mobile-logo.jpg"}">
+      <div class="row-main"><strong>${esc(p.name)}</strong><span>$${Number(p.price).toFixed(2)} · ${esc(categories.find(c=>c.id===p.category_id)?.name||"No category")}${p.featured?" · Featured":""}${stockSummary}${imgs.length?` · ${imgs.length} photos`:""}${cols.length?` · ${cols.length} colors`:""}</span></div>
+      <div class="row-actions"><button class="mini-btn" data-editp="${p.id}">Edit</button><button class="mini-btn danger" data-delp="${p.id}">Delete</button></div>
     </div>`;
   }).join("");
 
-  $("#categoryAdminList").innerHTML=categories.map(c=>`<div class="admin-row">
-    <div class="cat-icon">${c.parent_id?"↳":"# "}</div>
-    <div class="row-main">
-      <strong>${esc(c.name)}</strong>
-      <span>${c.parent_id?"Subcategory of "+esc(categories.find(x=>x.id===c.parent_id)?.name||"Unknown"):"Main category"} · Order ${c.sort_order||0}</span>
-    </div>
-    <div class="row-actions">
-      <button class="mini-btn" data-editc="${c.id}">Edit</button>
-      <button class="mini-btn danger" data-delc="${c.id}">Delete</button>
-    </div>
-  </div>`).join("");
+  $("#promoList").innerHTML=promos.length?promos.map(pr=>{
+    const p=products.find(x=>String(x.id)===String(pr.product_id));
+    return `<div class="admin-row"><img src="${pr.image_url||"../assets/img/hadi-mobile-logo.jpg"}"><div class="row-main"><strong>${esc(pr.show_title?pr.title||"Untitled promo":"Image promo")}</strong><span>${esc(p?.name||"No product")}${pr.is_active?" · Active":" · Hidden"}</span></div><div class="row-actions"><button class="mini-btn" data-editpromo="${pr.id}">Edit</button><button class="mini-btn danger" data-delpromo="${pr.id}">Delete</button></div></div>`;
+  }).join(""):`<div class="empty-admin">No homepage promos yet.</div>`;
+
+  $("#categoryAdminList").innerHTML=categories.map(c=>`<div class="admin-row"><div class="cat-icon">${c.parent_id?"↳":"# "}</div><div class="row-main"><strong>${esc(c.name)}</strong><span>${c.parent_id?"Subcategory of "+esc(categories.find(x=>x.id===c.parent_id)?.name||"Unknown"):"Main category"} · Order ${c.sort_order||0}</span></div><div class="row-actions"><button class="mini-btn" data-editc="${c.id}">Edit</button><button class="mini-btn danger" data-delc="${c.id}">Delete</button></div></div>`).join("");
 
   $("#productCategory").innerHTML=categoryOptions();
+  $("#promoProduct").innerHTML=products.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
   bind();
 }
 
@@ -94,248 +79,136 @@ function bind(){
   document.querySelectorAll("[data-delp]").forEach(b=>b.onclick=()=>deleteProduct(b.dataset.delp));
   document.querySelectorAll("[data-editc]").forEach(b=>b.onclick=()=>editCategory(b.dataset.editc));
   document.querySelectorAll("[data-delc]").forEach(b=>b.onclick=()=>deleteCategory(b.dataset.delc));
+  document.querySelectorAll("[data-editpromo]").forEach(b=>b.onclick=()=>editPromo(b.dataset.editpromo));
+  document.querySelectorAll("[data-delpromo]").forEach(b=>b.onclick=()=>deletePromo(b.dataset.delpromo));
 }
 
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-  b.classList.add("active");
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");
   $("#productsTab").classList.toggle("hidden",b.dataset.tab!=="products");
+  $("#homepageTab").classList.toggle("hidden",b.dataset.tab!=="homepage");
   $("#categoriesTab").classList.toggle("hidden",b.dataset.tab!=="categories");
 });
-
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>$("#"+b.dataset.close).classList.remove("open"));
 
 $("#newProduct").onclick=()=>{
-  editingImage=null;
-  $("#productForm").reset();
-  $("#productId").value="";
-  $("#productStock").checked=true;
-  $("#productActive").checked=true;
-  $("#productHasPhoneOptions").checked=false;
-  $("#productEditorTitle").textContent="Add product";
-  $("#currentImage").innerHTML="";
-  $("#phoneOptionsRows").innerHTML="";
-  togglePhoneOptionsDrawer();
-  $("#productEditor").classList.add("open");
+  $("#productForm").reset();$("#productId").value="";$("#productStock").checked=true;$("#productActive").checked=true;
+  $("#productHasPhoneOptions").checked=false;$("#productHasColors").checked=false;$("#productEditorTitle").textContent="Add product";
+  $("#phoneOptionsRows").innerHTML="";$("#colorOptionsRows").innerHTML="";editingGallery=[];renderImageManager();toggleDrawers();$("#productEditor").classList.add("open");
 };
-
+$("#newPromo").onclick=()=>{
+  $("#promoForm").reset();$("#promoId").value="";$("#promoShowTitle").checked=true;$("#promoActive").checked=true;$("#promoButtonText").value="Shop now";$("#promoEditorTitle").textContent="Add promo";$("#currentPromoImage").innerHTML="";editingPromoImage=null;$("#promoEditor").classList.add("open");
+};
 $("#newCategory").onclick=()=>{
-  $("#categoryForm").reset();
-  $("#categoryId").value="";
-  $("#categoryEditorTitle").textContent="Add category";
-  $("#categoryParent").innerHTML='<option value="">None — main category</option>'+categoryOptions();
-  $("#categoryEditor").classList.add("open");
+  $("#categoryForm").reset();$("#categoryId").value="";$("#categoryEditorTitle").textContent="Add category";$("#categoryParent").innerHTML='<option value="">None — main category</option>'+categoryOptions();$("#categoryEditor").classList.add("open");
 };
 
 function editProduct(id){
-  const p=products.find(x=>String(x.id)===String(id));
-  if(!p)return;
-
-  editingImage=p.image_url||null;
-  $("#productId").value=p.id;
-  $("#productName").value=p.name;
-  $("#productPrice").value=p.price;
-  $("#productCategory").value=p.category_id||"";
-  $("#productDescription").value=p.description||"";
-  $("#productStock").checked=!!p.in_stock;
-  $("#productFeatured").checked=!!p.featured;
-  $("#productActive").checked=p.is_active!==false;
-  $("#productHasPhoneOptions").checked=!!p.has_phone_options;
-  $("#currentImage").innerHTML=p.image_url?`<img src="${p.image_url}">`:"";
-  $("#productEditorTitle").textContent="Edit product";
-
-  $("#phoneOptionsRows").innerHTML="";
-  optionsFor(p.id).forEach(o=>addPhoneRow(o.phone_model,o.in_stock));
-  togglePhoneOptionsDrawer();
-
-  $("#productEditor").classList.add("open");
+  const p=products.find(x=>String(x.id)===String(id));if(!p)return;
+  $("#productId").value=p.id;$("#productName").value=p.name;$("#productPrice").value=p.price;$("#productCategory").value=p.category_id||"";$("#productDescription").value=p.description||"";
+  $("#productStock").checked=!!p.in_stock;$("#productFeatured").checked=!!p.featured;$("#productActive").checked=p.is_active!==false;$("#productHasPhoneOptions").checked=!!p.has_phone_options;$("#productHasColors").checked=!!p.has_color_options;$("#productEditorTitle").textContent="Edit product";
+  $("#phoneOptionsRows").innerHTML="";optionsFor(p.id).forEach(o=>addPhoneRow(o.phone_model,o.in_stock));
+  $("#colorOptionsRows").innerHTML="";colorsFor(p.id).forEach(c=>addColorRow(c.name,c.hex_color,c.id));
+  const existing=imagesFor(p.id);
+  editingGallery=existing.length?existing.map(img=>({key:uid(),id:img.id,url:img.image_url,file:null,isPrimary:!!img.is_primary,colorKey:img.color_id||""})):(p.image_url?[{key:uid(),id:null,url:p.image_url,file:null,isPrimary:true,colorKey:""}]:[]);
+  if(editingGallery.length&&!editingGallery.some(x=>x.isPrimary))editingGallery[0].isPrimary=true;
+  renderImageManager();toggleDrawers();$("#productEditor").classList.add("open");
 }
 
+function editPromo(id){
+  const pr=promos.find(x=>String(x.id)===String(id));if(!pr)return;
+  $("#promoId").value=pr.id;$("#promoTitle").value=pr.title||"";$("#promoShowTitle").checked=pr.show_title!==false;$("#promoButtonText").value=pr.button_text||"Shop now";$("#promoProduct").value=pr.product_id||"";$("#promoActive").checked=pr.is_active!==false;editingPromoImage=pr.image_url||null;$("#currentPromoImage").innerHTML=pr.image_url?`<img src="${pr.image_url}">`:"";$("#promoEditorTitle").textContent="Edit promo";$("#promoEditor").classList.add("open");
+}
 function editCategory(id){
-  const c=categories.find(x=>String(x.id)===String(id));
-  if(!c)return;
-  $("#categoryId").value=c.id;
-  $("#categoryName").value=c.name;
-  $("#categoryOrder").value=c.sort_order||0;
-  $("#categoryParent").innerHTML='<option value="">None — main category</option>'+categoryOptions(c.id);
-  $("#categoryParent").value=c.parent_id||"";
-  $("#categoryEditorTitle").textContent="Edit category";
-  $("#categoryEditor").classList.add("open");
+  const c=categories.find(x=>String(x.id)===String(id));if(!c)return;
+  $("#categoryId").value=c.id;$("#categoryName").value=c.name;$("#categoryOrder").value=c.sort_order||0;$("#categoryParent").innerHTML='<option value="">None — main category</option>'+categoryOptions(c.id);$("#categoryParent").value=c.parent_id||"";$("#categoryEditorTitle").textContent="Edit category";$("#categoryEditor").classList.add("open");
 }
 
-$("#productHasPhoneOptions").addEventListener("change",()=>{
-  if($("#productHasPhoneOptions").checked && !$("#phoneOptionsRows").children.length){
-    addPhoneRow("",true);
-  }
-  togglePhoneOptionsDrawer();
-});
-
-$("#addPhoneOption").addEventListener("click",()=>addPhoneRow("",true));
+$("#productHasPhoneOptions").addEventListener("change",()=>{if($("#productHasPhoneOptions").checked&&!$("#phoneOptionsRows").children.length)addPhoneRow("",true);toggleDrawers();});
+$("#productHasColors").addEventListener("change",()=>{if($("#productHasColors").checked&&!$("#colorOptionsRows").children.length)addColorRow("Black","#111111");toggleDrawers();renderImageManager();});
+$("#addPhoneOption").onclick=()=>addPhoneRow("",true);
+$("#addColorOption").onclick=()=>{addColorRow("","#111111");renderImageManager();};
 
 function addPhoneRow(model="",inStock=true){
-  const row=document.createElement("div");
-  row.className="phone-option-row";
-  row.innerHTML=`
-    <input class="phone-model-input" type="text" placeholder="e.g. iPhone 16 Pro" value="${esc(model)}">
-    <label class="phone-stock-switch"><input class="phone-stock-input" type="checkbox" ${inStock?"checked":""}><span>In stock</span></label>
-    <button class="phone-remove-btn" type="button" aria-label="Remove phone model">×</button>
-  `;
-  row.querySelector(".phone-remove-btn").onclick=()=>row.remove();
-  $("#phoneOptionsRows").appendChild(row);
+  const row=document.createElement("div");row.className="phone-option-row";row.innerHTML=`<input class="phone-model-input" type="text" placeholder="e.g. iPhone 17 Pro" value="${esc(model)}"><label class="phone-stock-switch"><input class="phone-stock-input" type="checkbox" ${inStock?"checked":""}><span>In stock</span></label><button class="phone-remove-btn" type="button">×</button>`;row.querySelector(".phone-remove-btn").onclick=()=>row.remove();$("#phoneOptionsRows").appendChild(row);
+}
+function addColorRow(name="",hex="#111111",key=uid()){
+  const row=document.createElement("div");row.className="color-option-row";row.dataset.colorKey=key;row.innerHTML=`<input class="color-swatch-input" type="color" value="${esc(hex||"#111111")}"><input class="color-name-input" type="text" placeholder="e.g. Orange" value="${esc(name)}"><button class="phone-remove-btn" type="button">×</button>`;
+  row.querySelector(".phone-remove-btn").onclick=()=>{const removed=row.dataset.colorKey;row.remove();editingGallery.forEach(img=>{if(String(img.colorKey)===String(removed))img.colorKey="";});renderImageManager();};
+  row.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>renderImageManager()));$("#colorOptionsRows").appendChild(row);
+}
+function toggleDrawers(){
+  const phones=$("#productHasPhoneOptions").checked, colors=$("#productHasColors").checked;$("#phoneOptionsDrawer").classList.toggle("hidden",!phones);$("#colorOptionsDrawer").classList.toggle("hidden",!colors);$("#productStock").disabled=phones;const l=$("#productStock").closest("label");if(l)l.style.opacity=phones?".45":"1";
+}
+const getPhoneRows=()=>[...document.querySelectorAll(".phone-option-row")].map((row,index)=>({phone_model:row.querySelector(".phone-model-input").value.trim(),in_stock:row.querySelector(".phone-stock-input").checked,sort_order:index})).filter(r=>r.phone_model);
+const getColorRows=()=>[...document.querySelectorAll(".color-option-row")].map((row,index)=>({key:row.dataset.colorKey,name:row.querySelector(".color-name-input").value.trim(),hex_color:row.querySelector(".color-swatch-input").value,sort_order:index})).filter(r=>r.name);
+
+$("#productImages").addEventListener("change",e=>{
+  [...e.target.files].forEach(file=>editingGallery.push({key:uid(),id:null,url:URL.createObjectURL(file),file,isPrimary:editingGallery.length===0,colorKey:""}));e.target.value="";renderImageManager();
+});
+function renderImageManager(){
+  const box=$("#imageManager");if(!box)return;const colors=getColorRows();
+  if(!editingGallery.length){box.innerHTML='<div class="image-empty">No photos added yet.</div>';return;}
+  box.innerHTML=editingGallery.map((img,idx)=>`<div class="image-item" data-image-key="${img.key}"><img src="${img.url}"><div class="image-item-controls"><label class="cover-choice"><input type="radio" name="coverImage" ${img.isPrimary?"checked":""} data-cover="${img.key}"> Cover</label>${$("#productHasColors").checked?`<select data-image-color="${img.key}"><option value="">No color</option>${colors.map(c=>`<option value="${esc(c.key)}" ${String(c.key)===String(img.colorKey)?"selected":""}>${esc(c.name||"Color")}</option>`).join("")}</select>`:""}<button type="button" class="image-remove" data-remove-image="${img.key}">Remove</button></div></div>`).join("");
+  box.querySelectorAll("[data-cover]").forEach(r=>r.onchange=()=>{editingGallery.forEach(x=>x.isPrimary=x.key===r.dataset.cover);});
+  box.querySelectorAll("[data-image-color]").forEach(s=>s.onchange=()=>{const x=editingGallery.find(i=>i.key===s.dataset.imageColor);if(x)x.colorKey=s.value;});
+  box.querySelectorAll("[data-remove-image]").forEach(b=>b.onclick=()=>{const was=editingGallery.find(x=>x.key===b.dataset.removeImage)?.isPrimary;editingGallery=editingGallery.filter(x=>x.key!==b.dataset.removeImage);if(was&&editingGallery.length)editingGallery[0].isPrimary=true;renderImageManager();});
 }
 
-function togglePhoneOptionsDrawer(){
-  const enabled=$("#productHasPhoneOptions").checked;
-  $("#phoneOptionsDrawer").classList.toggle("hidden",!enabled);
-  $("#productStock").disabled=enabled;
-  const label=$("#productStock").closest("label");
-  if(label) label.style.opacity=enabled?".45":"1";
-}
-
-function getPhoneRows(){
-  return [...document.querySelectorAll(".phone-option-row")].map((row,index)=>({
-    phone_model:row.querySelector(".phone-model-input").value.trim(),
-    in_stock:row.querySelector(".phone-stock-input").checked,
-    sort_order:index
-  })).filter(r=>r.phone_model);
+async function uploadFile(file,prefix="product"){
+  const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const name=`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;const up=await sb.storage.from("product-images").upload(name,file,{cacheControl:"3600",upsert:false});if(up.error)throw up.error;return sb.storage.from("product-images").getPublicUrl(name).data.publicUrl;
 }
 
 $("#productForm").addEventListener("submit",async e=>{
-  e.preventDefault();
-  const msg=$("#productMsg");
-  msg.textContent="Saving...";
-
+  e.preventDefault();const msg=$("#productMsg");msg.textContent="Saving...";
   try{
-    let image_url=editingImage;
-    const file=$("#productImage").files[0];
+    const hasPhones=$("#productHasPhoneOptions").checked, hasColors=$("#productHasColors").checked;const phones=hasPhones?getPhoneRows():[];const colors=hasColors?getColorRows():[];
+    if(hasPhones&&!phones.length)throw new Error("Add at least one phone model.");
+    if(hasColors&&!colors.length)throw new Error("Add at least one color.");
+    if(new Set(phones.map(r=>r.phone_model.toLowerCase())).size!==phones.length)throw new Error("The same phone model was added more than once.");
+    if(new Set(colors.map(r=>r.name.toLowerCase())).size!==colors.length)throw new Error("The same color was added more than once.");
+    if(!editingGallery.length)throw new Error("Add at least one product photo.");
 
-    if(file){
-      const ext=file.name.split(".").pop().toLowerCase();
-      const name=`${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const up=await sb.storage.from("product-images").upload(name,file,{cacheControl:"3600",upsert:false});
-      if(up.error)throw up.error;
-      image_url=sb.storage.from("product-images").getPublicUrl(name).data.publicUrl;
-    }
+    for(const img of editingGallery){if(img.file){img.url=await uploadFile(img.file,"product");img.file=null;}}
+    if(!editingGallery.some(x=>x.isPrimary))editingGallery[0].isPrimary=true;const cover=editingGallery.find(x=>x.isPrimary)||editingGallery[0];
+    const payload={name:$("#productName").value.trim(),price:Number($("#productPrice").value),category_id:$("#productCategory").value||null,description:$("#productDescription").value.trim(),image_url:cover.url,in_stock:hasPhones?phones.some(r=>r.in_stock):$("#productStock").checked,featured:$("#productFeatured").checked,is_active:$("#productActive").checked,has_phone_options:hasPhones,has_color_options:hasColors};
+    let productId=$("#productId").value;
+    if(productId){const r=await sb.from("products").update(payload).eq("id",productId).select("id").single();if(r.error)throw r.error;productId=r.data.id;}else{const r=await sb.from("products").insert(payload).select("id").single();if(r.error)throw r.error;productId=r.data.id;}
 
-    const hasPhoneOptions=$("#productHasPhoneOptions").checked;
-    const rows=hasPhoneOptions?getPhoneRows():[];
+    let r=await sb.from("product_images").delete().eq("product_id",productId);if(r.error)throw r.error;
+    r=await sb.from("product_colors").delete().eq("product_id",productId);if(r.error)throw r.error;
+    r=await sb.from("product_phone_options").delete().eq("product_id",productId);if(r.error)throw r.error;
 
-    if(hasPhoneOptions && !rows.length){
-      throw new Error("Add at least one phone model, or turn off phone-model availability.");
-    }
+    const colorIdByKey={};
+    if(hasColors&&colors.length){const ins=await sb.from("product_colors").insert(colors.map(c=>({product_id:productId,name:c.name,hex_color:c.hex_color,sort_order:c.sort_order}))).select("id,name,hex_color,sort_order");if(ins.error)throw ins.error;colors.forEach(c=>{const found=ins.data.find(x=>x.name===c.name&&x.sort_order===c.sort_order);if(found)colorIdByKey[c.key]=found.id;});}
+    const imgs=editingGallery.map((img,index)=>({product_id:productId,image_url:img.url,is_primary:!!img.isPrimary,sort_order:index,color_id:img.colorKey?colorIdByKey[img.colorKey]||null:null}));
+    r=await sb.from("product_images").insert(imgs);if(r.error)throw r.error;
+    if(hasPhones&&phones.length){r=await sb.from("product_phone_options").insert(phones.map(x=>({...x,product_id:productId})));if(r.error)throw r.error;}
 
-    const normalized=[...new Set(rows.map(r=>r.phone_model.toLowerCase()))];
-    if(normalized.length!==rows.length){
-      throw new Error("The same phone model was added more than once.");
-    }
+    $("#productEditor").classList.remove("open");msg.textContent="";await reload();
+  }catch(err){console.error(err);msg.textContent=err.message||"Could not save product.";}
+});
 
-    const calculatedStock=hasPhoneOptions ? rows.some(r=>r.in_stock) : $("#productStock").checked;
-
-    const payload={
-      name:$("#productName").value.trim(),
-      price:Number($("#productPrice").value),
-      category_id:$("#productCategory").value||null,
-      description:$("#productDescription").value.trim(),
-      image_url,
-      in_stock:calculatedStock,
-      featured:$("#productFeatured").checked,
-      is_active:$("#productActive").checked,
-      has_phone_options:hasPhoneOptions
-    };
-
-    const existingId=$("#productId").value;
-    let productId=existingId;
-
-    if(existingId){
-      const res=await sb.from("products").update(payload).eq("id",existingId).select("id").single();
-      if(res.error)throw res.error;
-      productId=res.data.id;
-    }else{
-      const res=await sb.from("products").insert(payload).select("id").single();
-      if(res.error)throw res.error;
-      productId=res.data.id;
-    }
-
-    const del=await sb.from("product_phone_options").delete().eq("product_id",productId);
-    if(del.error)throw del.error;
-
-    if(hasPhoneOptions && rows.length){
-      const insertRows=rows.map(r=>({...r,product_id:productId}));
-      const add=await sb.from("product_phone_options").insert(insertRows);
-      if(add.error)throw add.error;
-    }
-
-    $("#productEditor").classList.remove("open");
-    msg.textContent="";
-    await reload();
-  }catch(err){
-    console.error(err);
-    msg.textContent=err.message||"Could not save product.";
-  }
+$("#promoForm").addEventListener("submit",async e=>{
+  e.preventDefault();const msg=$("#promoMsg");msg.textContent="Saving...";
+  try{
+    let image_url=editingPromoImage;const file=$("#promoImage").files[0];if(file)image_url=await uploadFile(file,"promo");if(!image_url)throw new Error("Add a promo image.");
+    const payload={image_url,title:$("#promoTitle").value.trim(),show_title:$("#promoShowTitle").checked,button_text:$("#promoButtonText").value.trim()||"Shop now",product_id:$("#promoProduct").value||null,is_active:$("#promoActive").checked};
+    const id=$("#promoId").value;const r=id?await sb.from("home_promotions").update(payload).eq("id",id):await sb.from("home_promotions").insert(payload);if(r.error)throw r.error;$("#promoEditor").classList.remove("open");msg.textContent="";await reload();
+  }catch(err){console.error(err);msg.textContent=err.message||"Could not save promo.";}
 });
 
 $("#categoryForm").addEventListener("submit",async e=>{
-  e.preventDefault();
-  const msg=$("#categoryMsg");
-  msg.textContent="Saving...";
-
-  const id=$("#categoryId").value;
-  const payload={
-    name:$("#categoryName").value.trim(),
-    slug:slugify($("#categoryName").value),
-    parent_id:$("#categoryParent").value||null,
-    sort_order:Number($("#categoryOrder").value||0)
-  };
-
-  const res=id
-    ? await sb.from("categories").update(payload).eq("id",id)
-    : await sb.from("categories").insert(payload);
-
-  if(res.error){msg.textContent=res.error.message;return;}
-  $("#categoryEditor").classList.remove("open");
-  msg.textContent="";
-  await reload();
+  e.preventDefault();const msg=$("#categoryMsg");msg.textContent="Saving...";const id=$("#categoryId").value;const payload={name:$("#categoryName").value.trim(),slug:slugify($("#categoryName").value),parent_id:$("#categoryParent").value||null,sort_order:Number($("#categoryOrder").value||0)};const r=id?await sb.from("categories").update(payload).eq("id",id):await sb.from("categories").insert(payload);if(r.error){msg.textContent=r.error.message;return;}$("#categoryEditor").classList.remove("open");msg.textContent="";await reload();
 });
 
-async function deleteProduct(id){
-  if(!confirm("Delete this product?"))return;
-  const r=await sb.from("products").delete().eq("id",id);
-  if(r.error)alert(r.error.message);else await reload();
-}
-
-async function deleteCategory(id){
-  if(!confirm("Delete this category? Products inside it must be moved or deleted first."))return;
-  const r=await sb.from("categories").delete().eq("id",id);
-  if(r.error)alert(r.error.message);else await reload();
-}
-
-$("#logoutBtn").onclick=async()=>{
-  await sb.auth.signOut();
-  location.href="login.html";
-};
+async function deleteProduct(id){if(!confirm("Delete this product?"))return;const r=await sb.from("products").delete().eq("id",id);if(r.error)alert(r.error.message);else await reload();}
+async function deletePromo(id){if(!confirm("Delete this homepage promo?"))return;const r=await sb.from("home_promotions").delete().eq("id",id);if(r.error)alert(r.error.message);else await reload();}
+async function deleteCategory(id){if(!confirm("Delete this category? Products inside it must be moved or deleted first."))return;const r=await sb.from("categories").delete().eq("id",id);if(r.error)alert(r.error.message);else await reload();}
+$("#logoutBtn").onclick=async()=>{await sb.auth.signOut();location.href="login.html";};
 
 function injectAdminEnhancementStyles(){
-  const style=document.createElement("style");
-  style.textContent=`
-    .phone-options-toggle{margin:16px 0 8px;padding:14px;border:1px solid rgba(22,119,255,.12);background:linear-gradient(145deg,#f7fbff,#f4efff);border-radius:16px}
-    .phone-toggle-label{display:flex!important;align-items:flex-start;gap:11px;margin:0!important;cursor:pointer}
-    .phone-toggle-label>input{width:auto!important;margin:3px 0 0!important}
-    .phone-toggle-label span{display:block}
-    .phone-toggle-label strong{display:block;font-size:.79rem;color:var(--text)}
-    .phone-toggle-label small{display:block;margin-top:4px!important;line-height:1.45}
-    .phone-options-drawer{margin:10px 0 18px;padding:14px;border:1px solid var(--line);border-radius:17px;background:#f9fbff}
-    .phone-options-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
-    .phone-options-head strong{display:block;font-size:.8rem}
-    .phone-options-head small{display:block;color:var(--muted);font-size:.65rem;line-height:1.4;margin-top:4px}
-    .phone-options-head .mini-btn{flex:0 0 auto}
-    #phoneOptionsRows{display:grid;gap:8px}
-    .phone-option-row{display:grid;grid-template-columns:minmax(0,1fr) auto 34px;gap:7px;align-items:center;padding:8px;border-radius:13px;background:#fff;border:1px solid var(--line)}
-    .phone-model-input{margin:0!important;padding:10px!important}
-    .phone-stock-switch{display:flex!important;align-items:center;gap:5px;margin:0!important;white-space:nowrap;font-size:.64rem!important}
-    .phone-stock-switch input{width:auto!important;margin:0!important}
-    .phone-remove-btn{width:32px;height:32px;border:1px solid #f0c9c9;background:#fff6f6;color:#d85252;border-radius:9px;font-size:1.1rem}
-    .phone-options-note{margin-top:10px;font-size:.62rem;color:var(--muted);line-height:1.45}
-    @media(max-width:480px){.phone-option-row{grid-template-columns:1fr auto}.phone-remove-btn{grid-column:2}.phone-stock-switch{grid-column:1;grid-row:2}}
-  `;
+  const style=document.createElement("style");style.textContent=`
+  .admin-subsection{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:18px;background:#fbfdff}.admin-subsection-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}.admin-subsection-head strong{font-size:.82rem}.admin-subsection-head small{display:block;color:var(--muted);font-size:.64rem;margin-top:3px}.option-toggle{display:flex!important;align-items:center;gap:10px;margin:8px 0!important;padding:12px;border-radius:14px;background:linear-gradient(145deg,#f7fbff,#f6f2ff);cursor:pointer}.option-toggle input{width:auto!important;margin:0!important}.option-toggle strong{font-size:.76rem}.option-drawer{margin:6px 0 12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff}.drawer-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.drawer-head strong{font-size:.74rem}#phoneOptionsRows,#colorOptionsRows{display:grid;gap:8px}.phone-option-row,.color-option-row{display:grid;grid-template-columns:minmax(0,1fr) auto 34px;gap:7px;align-items:center;padding:8px;border-radius:13px;background:#fff;border:1px solid var(--line)}.color-option-row{grid-template-columns:46px minmax(0,1fr) 34px}.color-swatch-input{width:42px!important;height:38px!important;padding:2px!important;border-radius:10px!important}.phone-model-input,.color-name-input{margin:0!important;padding:10px!important}.phone-stock-switch{display:flex!important;align-items:center;gap:5px;margin:0!important;white-space:nowrap;font-size:.64rem!important}.phone-stock-switch input{width:auto!important;margin:0!important}.phone-remove-btn{width:32px;height:32px;border:1px solid #f0c9c9;background:#fff6f6;color:#d85252;border-radius:9px;font-size:1.1rem}.image-manager{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;margin-top:10px}.image-item{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}.image-item>img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}.image-item-controls{display:grid;gap:6px;padding:8px}.image-item-controls select{width:100%;padding:8px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit;font-size:.64rem}.cover-choice{display:flex!important;align-items:center;gap:5px;margin:0!important;font-size:.64rem!important}.cover-choice input{width:auto!important;margin:0!important}.image-remove{border:0;background:#fff0f0;color:#cf4c4c;border-radius:8px;padding:7px;font-size:.62rem;font-weight:800}.image-empty,.empty-admin{padding:16px;color:var(--muted);font-size:.7rem;text-align:center}.current-image img{max-width:180px;border-radius:14px;margin-top:8px}@media(max-width:480px){.phone-option-row{grid-template-columns:1fr auto}.phone-remove-btn{grid-column:2}.phone-stock-switch{grid-column:1;grid-row:2}.image-manager{grid-template-columns:repeat(2,1fr)}}`;
   document.head.appendChild(style);
 }
