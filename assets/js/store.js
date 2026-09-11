@@ -4,7 +4,7 @@ const configured=CFG.SUPABASE_URL && !CFG.SUPABASE_URL.startsWith("YOUR_");
 const sb=configured?window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY):null;
 const PAGE=document.body.dataset.page||"home";
 
-let categories=[],products=[],phoneOptions=[];
+let categories=[],products=[],phoneOptions=[],productImages=[],productColors=[],promos=[];
 let activeCategory="all",search="",sort="newest";
 
 let cart=(JSON.parse(localStorage.getItem("hadi_cart")||"[]")||[]).map(i=>({
@@ -27,26 +27,22 @@ async function load(){
     return;
   }
 
-  const [c,p,o]=await Promise.all([
+  const [c,p,o,i,col,pr]=await Promise.all([
     sb.from("categories").select("*").order("sort_order"),
     sb.from("products").select("*").eq("is_active",true).order("created_at",{ascending:false}),
-    sb.from("product_phone_options").select("*").order("sort_order")
+    sb.from("product_phone_options").select("*").order("sort_order"),
+    sb.from("product_images").select("*").order("sort_order"),
+    sb.from("product_colors").select("*").order("sort_order"),
+    sb.from("home_promotions").select("*").eq("is_active",true).order("sort_order")
   ]);
 
-  if(c.error||p.error||o.error){
-    console.error("Store data load failed:",c.error||p.error||o.error);
-    categories=c.data||[];
-    products=p.data||[];
-    phoneOptions=o.data||[];
-  }else{
-    categories=c.data||[];
-    products=p.data||[];
-    phoneOptions=o.data||[];
-  }
+  if(c.error||p.error||o.error||i.error||col.error||pr.error){console.error("Store data load failed:",c.error||p.error||o.error||i.error||col.error||pr.error);}
+  categories=c.data||[];products=p.data||[];phoneOptions=o.data||[];productImages=i.data||[];productColors=col.data||[];promos=pr.data||[];
 
   renderCart();
 
   if(PAGE==="home"){
+    renderHomePromos();
     renderFeatured();
     initHomeSearch();
     initHeroScrollAnimation();
@@ -57,9 +53,10 @@ async function load(){
   }
 }
 
-function optionsFor(productId){
-  return phoneOptions.filter(o=>String(o.product_id)===String(productId));
-}
+function optionsFor(productId){return phoneOptions.filter(o=>String(o.product_id)===String(productId));}
+function imagesFor(productId){return productImages.filter(o=>String(o.product_id)===String(productId)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));}
+function colorsFor(productId){return productColors.filter(o=>String(o.product_id)===String(productId)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));}
+function mainImage(p){const imgs=imagesFor(p.id);return imgs.find(x=>x.is_primary)?.image_url||imgs[0]?.image_url||p.image_url||"assets/img/hadi-mobile-logo.jpg";}
 function rootCategories(){
   return categories.filter(c=>!c.parent_id).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
 }
@@ -96,7 +93,7 @@ function card(p){
 
   return `<article class="product-card ${!available?"product-card-out":""}">
     <div class="product-image-wrap" data-view="${p.id}">
-      <img src="${p.image_url||"assets/img/hadi-mobile-logo.jpg"}" alt="${esc(p.name)}" loading="lazy">
+      <img src="${mainImage(p)}" alt="${esc(p.name)}" loading="lazy">
       ${p.featured?'<span class="product-badge">FEATURED</span>':""}
       ${!available?'<span class="stock-overlay-badge">OUT OF STOCK</span>':""}
     </div>
@@ -104,7 +101,7 @@ function card(p){
       <div class="product-category">${esc(catName(p.category_id))}</div>
       <h3>${esc(p.name)}</h3>
       <div class="product-price">${money(p.price)}</div>
-      ${configurable?'<div class="phone-fit-note">Choose your phone model</div>':""}
+      
       <div class="product-actions">
         <button class="add-btn" ${action} ${!available?"disabled":""}>${addLabel}</button>
         <button class="view-btn" data-view="${p.id}" aria-label="View details for ${esc(p.name)}">View</button>
@@ -304,62 +301,55 @@ function renderCategoryProducts(){
   if($("#productCount"))$("#productCount").textContent=`${list.length} ${list.length===1?"product":"products"}`;
 }
 
+function renderHomePromos(){
+  if(!promos.length)return;
+  let section=$("#homePromoSection");
+  if(!section){
+    section=document.createElement("section");section.id="homePromoSection";section.className="home-promo-section";
+    const target=$("#featuredSection")||document.querySelector("main section:last-of-type")||document.querySelector("main");
+    if(target?.parentNode)target.parentNode.insertBefore(section,target);else document.body.appendChild(section);
+  }
+  section.innerHTML=`<div class="home-promo-track">${promos.map(pr=>`<article class="home-promo-card"><img src="${pr.image_url}" alt="${esc(pr.title||"HADI MOBILE")}"><div class="home-promo-shade"></div><div class="home-promo-copy">${pr.show_title&&pr.title?`<h2>${esc(pr.title)}</h2>`:""}<button class="home-promo-btn" data-promo-product="${pr.product_id}">${esc(pr.button_text||"Shop now")}</button></div></article>`).join("")}</div>${promos.length>1?`<div class="home-promo-dots">${promos.map((_,i)=>`<button data-promo-dot="${i}" class="${i===0?"active":""}" aria-label="Promo ${i+1}"></button>`).join("")}</div>`:""}`;
+  const track=section.querySelector(".home-promo-track");
+  section.querySelectorAll("[data-promo-product]").forEach(b=>b.onclick=()=>openProduct(b.dataset.promoProduct,false));
+  section.querySelectorAll("[data-promo-dot]").forEach(b=>b.onclick=()=>track.children[Number(b.dataset.promoDot)]?.scrollIntoView({behavior:"smooth",block:"nearest",inline:"start"}));
+  if(track&&promos.length>1){track.addEventListener("scroll",()=>{const i=Math.round(track.scrollLeft/Math.max(track.clientWidth,1));section.querySelectorAll("[data-promo-dot]").forEach((d,n)=>d.classList.toggle("active",n===i));},{passive:true});}
+}
+
 function openProduct(id,focusChoice=false){
   const p=products.find(x=>String(x.id)===String(id));
   const modal=$("#productModal"),content=$("#productModalContent");
   if(!p||!modal||!content)return;
 
-  const opts=optionsFor(p.id);
-  const configurable=!!p.has_phone_options;
-  const overallAvailable=productAvailable(p);
+  const opts=optionsFor(p.id), colors=colorsFor(p.id);
+  const imgsRaw=imagesFor(p.id);
+  const imgs=imgsRaw.length?imgsRaw:[{id:"legacy",image_url:p.image_url||"assets/img/hadi-mobile-logo.jpg",color_id:null,is_primary:true,sort_order:0}];
+  const configurable=!!p.has_phone_options, overallAvailable=productAvailable(p);
 
   let optionMarkup="";
   if(configurable){
-    optionMarkup=`
-      <div class="phone-choice-block">
-        <label for="phoneChoice">Choose your phone model</label>
-        <select id="phoneChoice">
-          <option value="">Select your phone</option>
-          ${opts.map(o=>`<option value="${esc(o.phone_model)}" ${!o.in_stock?"disabled":""}>${esc(o.phone_model)}${o.in_stock?"":" — Out of stock"}</option>`).join("")}
-        </select>
-        <div class="phone-choice-help">Unavailable models stay visible so you can immediately see whether this product fits your phone.</div>
-      </div>`;
+    optionMarkup=`<div class="phone-choice-block"><label for="phoneChoice">Choose your phone model</label><select id="phoneChoice"><option value="">Select your phone</option>${opts.map(o=>`<option value="${esc(o.phone_model)}" ${!o.in_stock?"disabled":""}>${esc(o.phone_model)}${o.in_stock?"":" — Out of stock"}</option>`).join("")}</select></div>`;
   }
 
-  content.innerHTML=`<div class="modal-product">
-    <img src="${p.image_url||"assets/img/hadi-mobile-logo.jpg"}" alt="${esc(p.name)}">
-    <div class="modal-copy">
-      <span class="eyebrow">${esc(catName(p.category_id))}</span>
-      <h2>${esc(p.name)}</h2>
-      <div class="modal-price">${money(p.price)}</div>
-      <p class="desc">${esc(p.description||"")}</p>
-      ${optionMarkup}
-      <div class="stock-note ${overallAvailable?"":"stock-note-out"}">${overallAvailable?(configurable?"Choose an available phone model below.":"In stock"):"Currently out of stock"}</div>
-      <button class="primary-btn" id="modalAddBtn" style="margin-top:16px" ${!overallAvailable||configurable?"disabled":""}>${overallAvailable?(configurable?"Choose phone first":"Add to cart"):"Out of stock"}</button>
-    </div>
-  </div>`;
+  const colorMarkup=p.has_color_options&&colors.length?`<div class="color-choice-block"><div class="color-choice-label">Color: <strong id="selectedColorName">${esc(colors[0].name)}</strong></div><div class="color-dots">${colors.map((c,i)=>`<button class="color-dot ${i===0?"active":""}" data-color-id="${c.id}" data-color-name="${esc(c.name)}" style="--dot:${esc(c.hex_color||"#111111")}" aria-label="${esc(c.name)}"></button>`).join("")}</div></div>`:"";
 
-  const add=$("#modalAddBtn");
-  const select=$("#phoneChoice");
+  content.innerHTML=`<div class="modal-product"><div class="product-gallery"><div class="product-gallery-track" id="productGalleryTrack">${imgs.map((img,i)=>`<div class="product-gallery-slide" data-slide-index="${i}" data-color-id="${img.color_id||""}"><img src="${img.image_url}" alt="${esc(p.name)}"></div>`).join("")}</div>${imgs.length>1?`<div class="gallery-dots">${imgs.map((_,i)=>`<button class="gallery-dot ${i===0?"active":""}" data-gallery-dot="${i}" aria-label="Image ${i+1}"></button>`).join("")}</div>`:""}</div><div class="modal-copy"><span class="eyebrow">${esc(catName(p.category_id))}</span><h2>${esc(p.name)}</h2><div class="modal-price">${money(p.price)}</div><p class="desc">${esc(p.description||"")}</p>${colorMarkup}${optionMarkup}<div class="stock-note ${overallAvailable?"":"stock-note-out"}">${overallAvailable?"In stock":"Currently out of stock"}</div><button class="primary-btn" id="modalAddBtn" style="margin-top:16px" ${!overallAvailable||configurable?"disabled":""}>${overallAvailable?(configurable?"Choose phone first":"Add to cart"):"Out of stock"}</button></div></div>`;
 
-  if(configurable&&select&&add){
-    select.addEventListener("change",()=>{
-      const chosen=select.value;
-      add.disabled=!chosen;
-      add.textContent=chosen?`Add for ${chosen}`:"Choose phone first";
-    });
-    add.onclick=()=>{if(select.value)addToCart(p.id,select.value);};
-  }else if(add&&!add.disabled){
-    add.onclick=()=>addToCart(p.id);
-  }
+  const add=$("#modalAddBtn"),select=$("#phoneChoice"),track=$("#productGalleryTrack");
+  let selectedColorId=colors[0]?.id||"", selectedColorName=colors[0]?.name||"";
+  const syncColor=(colorId)=>{if(!colorId)return;const c=colors.find(x=>String(x.id)===String(colorId));if(!c)return;selectedColorId=c.id;selectedColorName=c.name;$("#selectedColorName")&&( $("#selectedColorName").textContent=c.name );content.querySelectorAll(".color-dot").forEach(d=>d.classList.toggle("active",String(d.dataset.colorId)===String(c.id)));};
+  const goToImage=(idx)=>{const slide=track?.children[idx];if(slide)track.scrollTo({left:slide.offsetLeft,behavior:"smooth"});};
+  content.querySelectorAll("[data-gallery-dot]").forEach(b=>b.onclick=()=>goToImage(Number(b.dataset.galleryDot)));
+  content.querySelectorAll(".color-dot").forEach(b=>b.onclick=()=>{syncColor(b.dataset.colorId);const idx=imgs.findIndex(x=>String(x.color_id)===String(b.dataset.colorId));if(idx>=0)goToImage(idx);});
+  if(track){let t;track.addEventListener("scroll",()=>{clearTimeout(t);t=setTimeout(()=>{const idx=Math.round(track.scrollLeft/Math.max(track.clientWidth,1));content.querySelectorAll("[data-gallery-dot]").forEach((d,n)=>d.classList.toggle("active",n===idx));const cid=imgs[idx]?.color_id;if(cid)syncColor(cid);},60);},{passive:true});}
 
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden","false");
+  if(configurable&&select&&add){select.addEventListener("change",()=>{const chosen=select.value;add.disabled=!chosen;add.textContent=chosen?"Add to cart":"Choose phone first";});add.onclick=()=>{if(select.value)addToCart(p.id,select.value,selectedColorName);};}
+  else if(add&&!add.disabled){add.onclick=()=>addToCart(p.id,"",selectedColorName);}
 
-  if(focusChoice&&select)setTimeout(()=>select.focus(),150);
+  modal.classList.add("open");modal.setAttribute("aria-hidden","false");if(focusChoice&&select)setTimeout(()=>select.focus(),150);
 }
 
-function addToCart(id,phoneModel=""){
+function addToCart(id,phoneModel="",colorName=""){
   const p=products.find(x=>String(x.id)===String(id));
   if(!p||!productAvailable(p))return;
 
@@ -368,7 +358,7 @@ function addToCart(id,phoneModel=""){
     if(!opt||!opt.in_stock){openProduct(id,true);return;}
   }
 
-  const key=`${p.id}${phoneModel?`::${phoneModel}`:""}`;
+  const key=`${p.id}${phoneModel?`::${phoneModel}`:""}${colorName?`::color:${colorName}`:""}`;
   const existing=cart.find(x=>x.key===key);
 
   if(existing)existing.qty++;
@@ -377,8 +367,9 @@ function addToCart(id,phoneModel=""){
     id:p.id,
     name:p.name,
     phone_model:phoneModel||"",
+    color_name:colorName||"",
     price:Number(p.price),
-    image_url:p.image_url||"assets/img/hadi-mobile-logo.jpg",
+    image_url:mainImage(p),
     qty:1
   });
 
@@ -408,7 +399,7 @@ function renderCart(){
     <img src="${i.image_url||"assets/img/hadi-mobile-logo.jpg"}" alt="">
     <div>
       <h4>${esc(i.name)}</h4>
-      ${i.phone_model?`<div class="cart-phone-model">${esc(i.phone_model)}</div>`:""}
+      ${i.phone_model?`<div class="cart-phone-model">${esc(i.phone_model)}</div>`:""}${i.color_name?`<div class="cart-phone-model">${esc(i.color_name)}</div>`:""}
       <small>${money(i.price)}</small>
       <div class="qty"><button data-dec="${esc(i.key)}">−</button><span>${i.qty}</span><button data-inc="${esc(i.key)}">+</button></div>
     </div>
@@ -444,7 +435,7 @@ function closeProduct(){
 function checkout(){
   if(!cart.length)return;
   const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
-  const lines=cart.map((i,n)=>`${n+1}. ${i.name}${i.phone_model?` — ${i.phone_model}`:""} × ${i.qty} — ${money(i.price*i.qty)}`).join("\n");
+  const lines=cart.map((i,n)=>`${n+1}. ${i.name}${i.phone_model?` — ${i.phone_model}`:""}${i.color_name?` — ${i.color_name}`:""} × ${i.qty} — ${money(i.price*i.qty)}`).join("\n");
   const msg=`Hello HADI MOBILE 👋\n\nI'd like to place this order:\n\n${lines}\n\nTotal: ${money(total)}\n\nPlease confirm availability and continue the order with me here.`;
   window.open(`https://wa.me/${CFG.WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`,"_blank");
 }
@@ -468,15 +459,17 @@ function injectStoreEnhancementStyles(){
   const style=document.createElement("style");
   style.textContent=`
     .whatsapp-btn svg{width:24px!important;height:24px!important;display:block!important;overflow:visible!important}
-    .phone-fit-note{font-size:.62rem;color:#697a91;margin-top:6px;font-weight:700}
     .stock-overlay-badge{position:absolute;right:9px;top:9px;background:#fff1f1;color:#d84f4f;border:1px solid #f1c5c5;border-radius:999px;padding:6px 8px;font-size:.53rem;font-weight:900;letter-spacing:.06em}
     .product-card-out .product-image-wrap img{opacity:.55;filter:grayscale(.25)}
     .phone-choice-block{margin-top:16px;padding:14px;border-radius:16px;background:linear-gradient(145deg,#f4fbff,#f6f1ff);border:1px solid rgba(22,119,255,.12)}
     .phone-choice-block label{display:block;font-size:.72rem;font-weight:800;color:#0a1f44;margin-bottom:7px}
     .phone-choice-block select{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(10,31,68,.12);background:#fff;color:#0a1f44;font:inherit}
-    .phone-choice-help{font-size:.62rem;line-height:1.45;color:#738098;margin-top:8px}
     .stock-note-out{color:#d84f4f!important}
     .cart-phone-model{font-size:.66rem;font-weight:800;color:#1677ff;margin:2px 0 3px}
+
+    .home-promo-section{padding:22px 0 10px;overflow:hidden}.home-promo-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding:0 max(20px,calc((100vw - 1180px)/2))}.home-promo-track::-webkit-scrollbar{display:none}.home-promo-card{position:relative;flex:0 0 min(1080px,calc(100vw - 40px));aspect-ratio:16/7;border-radius:28px;overflow:hidden;scroll-snap-align:start;background:#eef4ff;box-shadow:0 18px 50px rgba(24,55,105,.12)}.home-promo-card>img{width:100%;height:100%;object-fit:cover;display:block}.home-promo-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,18,43,.62),rgba(3,18,43,.06) 68%)}.home-promo-copy{position:absolute;left:clamp(22px,5vw,58px);bottom:clamp(22px,5vw,52px);right:22px;color:#fff}.home-promo-copy h2{font-size:clamp(1.7rem,4vw,3.4rem);line-height:1.02;max-width:650px;margin:0 0 16px}.home-promo-btn{border:0;border-radius:999px;padding:13px 20px;background:#fff;color:#0a1f44;font:inherit;font-weight:800}.home-promo-dots{display:flex;justify-content:center;gap:7px;margin-top:12px}.home-promo-dots button,.gallery-dot{width:7px;height:7px;border:0;border-radius:50%;padding:0;background:#b9c3d1}.home-promo-dots button.active,.gallery-dot.active{background:#0a1f44;transform:scale(1.25)}
+    .product-gallery{min-width:0}.product-gallery-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:22px;background:#f7f9fc}.product-gallery-track::-webkit-scrollbar{display:none}.product-gallery-slide{flex:0 0 100%;scroll-snap-align:start}.product-gallery-slide img{width:100%;aspect-ratio:1/1;object-fit:contain;display:block}.gallery-dots{display:flex;justify-content:center;gap:8px;margin:10px 0 4px}.color-choice-block{margin-top:16px}.color-choice-label{font-size:.75rem;color:#617086;margin-bottom:9px}.color-dots{display:flex;gap:10px;flex-wrap:wrap}.color-dot{width:24px;height:24px;border-radius:50%;background:var(--dot);border:2px solid #fff;box-shadow:0 0 0 1px rgba(10,31,68,.18);padding:0}.color-dot.active{box-shadow:0 0 0 2px #0a1f44,0 0 0 4px #fff}.cart-phone-model+ .cart-phone-model{color:#6d5dfc}
+    @media(max-width:700px){.home-promo-card{aspect-ratio:4/5;border-radius:22px}.home-promo-shade{background:linear-gradient(0deg,rgba(3,18,43,.66),rgba(3,18,43,.02) 70%)}.home-promo-copy h2{font-size:1.8rem}.modal-product{grid-template-columns:1fr!important}}
   `;
   document.head.appendChild(style);
 }
