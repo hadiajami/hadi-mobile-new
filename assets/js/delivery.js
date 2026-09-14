@@ -20,7 +20,7 @@
   $("#subtotal").textContent=money(total);
   $("#grandTotal").textContent=money(total);
   $("#whishAmount").textContent=money(total);
-  $("#summaryList").innerHTML=cart.map(i=>`<div class="summary-item"><img class="summary-thumb" src="${esc(i.image_url||i.image||'assets/img/hadi-mobile-icon.jpg')}" alt=""><div><strong>${esc(i.name)}</strong><small>${i.phone_model?esc(i.phone_model)+" · ":""}${i.color_name?esc(i.color_name)+" · ":""}Qty ${Number(i.qty||1)}</small></div><div class="summary-price">${money(Number(i.price||0)*Number(i.qty||1))}</div></div>`).join("");
+  $("#summaryList").innerHTML=cart.map(i=>`<div class="summary-item"><img class="summary-thumb" src="${esc(i.image_url||i.image||'assets/img/hadi-mobile-icon.jpg')}" alt=""><div><strong>${esc(i.name)}</strong><small>${i.phone_model?esc(i.phone_model)+" · ":""}${i.color_name?esc(i.color_name)+" · ":""}${i.storage_name?esc(i.storage_name)+" · ":""}Qty ${Number(i.qty||1)}</small></div><div class="summary-price">${money(Number(i.price||0)*Number(i.qty||1))}</div></div>`).join("");
 
   const saved=(()=>{try{return JSON.parse(localStorage.getItem("hadi_delivery_details")||"{}")||{}}catch{return{}}})();
   ["fullName","phone","governorate","area","street","building","floor","landmark","note"].forEach(id=>{if(saved[id]&&$("#"+id))$("#"+id).value=saved[id]});
@@ -64,6 +64,7 @@
       lines.push(`${index+1}. ${i.name} ×${Number(i.qty||1)} — ${money(Number(i.price||0)*Number(i.qty||1))}`);
       if(i.phone_model)lines.push(`   Model: ${i.phone_model}`);
       if(i.color_name)lines.push(`   Color: ${i.color_name}`);
+      if(i.storage_name)lines.push(`   Storage: ${i.storage_name}`);
     });
     lines.push(``,`💰 *Subtotal:* ${money(total)}`);
     lines.push(`💳 *Payment:* ${pay}`);
@@ -143,6 +144,7 @@
       product_name:i.name,
       phone_model:i.phone_model||null,
       color_name:i.color_name||null,
+      storage_name:i.storage_name||null,
       unit_price:Number(i.price||0),
       quantity:Number(i.qty||1),
       image_url:i.image_url||null
