@@ -1,132 +1,61 @@
-import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-
-const CFG=window.HADI_CONFIG;
-const sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
-const $=s=>document.querySelector(s);
-const esc=(s="")=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-const money=n=>`$${Number(n||0).toFixed(2)}`;
-let devices=[],renders=[],products=[],phoneOptions=[],images=[];
-let activeDevice=null,activeSlot="case";
-const selected={};
-const slotLabels={case:"Cases",screen:"Screen",camera:"Camera",charger:"Charging",other:"More"};
-let three=null,renderToken=0;
-
-function mainImage(p){const rows=images.filter(i=>String(i.product_id)===String(p.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));return rows.find(i=>i.is_primary)?.image_url||rows[0]?.image_url||p.image_url||"assets/img/hadi-mobile-logo.jpg";}
-function compatible(p,model){if(!p.has_phone_options)return true;return phoneOptions.some(o=>String(o.product_id)===String(p.id)&&o.phone_model===model&&o.in_stock);}
-function available(p){return p.is_active!==false&&(p.availability_status||"standard")==="standard"&&p.in_stock!==false;}
-function selectedValues(){return Object.values(selected);}
-function canUseFull3D(){return !!(activeDevice?.base_model_url && selectedValues().every(x=>x.render.model_url));}
-
-async function load(){
-  // Load Setup Studio devices FIRST and independently. The phone dropdown
-  // must come directly from Admin → Setup Studio, not from product compatibility.
-  const deviceRes = await sb.from("setup_devices").select("*");
-  if(deviceRes.error){
-    console.error("Setup devices load failed:", deviceRes.error);
-    devices=[];
-    renderDeviceSelect(deviceRes.error.message||"Could not load configured phones");
-    renderAll();
-    return;
-  }
-
-  devices=(deviceRes.data||[])
-    .filter(d=>d.is_active!==false)
-    .sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
-
-  // Render the selector immediately so configured phones are visible even if
-  // an unrelated products/accessories query has a problem.
-  renderDeviceSelect();
-
-  const [r,p,o,i]=await Promise.all([
-    sb.from("setup_product_renders").select("*"),
-    sb.from("products").select("*").eq("is_active",true),
-    sb.from("product_phone_options").select("*"),
-    sb.from("product_images").select("*").order("sort_order")
-  ]);
-  [r,p,o,i].forEach(x=>{if(x.error)console.error(x.error);});
-  renders=(r.data||[]).filter(x=>x.is_active!==false);
-  products=p.data||[];phoneOptions=o.data||[];images=i.data||[];
-
-  const preferred=localStorage.getItem("hadi_preferred_phone")||"";
-  const start=devices.find(x=>x.phone_model===preferred)||devices[0];
-  if(start){
-    $("#deviceSelect").value=String(start.id);
-    chooseDevice(start.id);
-  }else{
-    renderAll();
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#F8FBFF">
+  <link rel="icon" type="image/jpeg" href="assets/img/favicon.jpg">
+  <title>Build My Setup | HADI MOBILE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Manrope,system-ui,sans-serif;color:#0a1f44;background:radial-gradient(circle at 50% 0,#eaf9ff 0,#f7f9ff 42%,#fff 78%);min-height:100vh;padding-bottom:92px}.studio-header{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;padding:14px max(18px,calc((100vw - 1180px)/2));background:rgba(248,251,255,.83);backdrop-filter:blur(18px);border-bottom:1px solid rgba(10,31,68,.07)}.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#0a1f44}.brand img{width:44px;height:44px;border-radius:14px}.brand strong{display:block;font-size:.88rem}.brand span{display:block;font-size:.56rem;letter-spacing:.12em;color:#7b8aa2}.back{border:1px solid rgba(10,31,68,.1);background:#fff;border-radius:999px;padding:10px 14px;text-decoration:none;color:#0a1f44;font-size:.68rem;font-weight:800}.studio-shell{width:min(1180px,100%);margin:auto;padding:24px 18px 44px}.studio-intro{text-align:center;max-width:680px;margin:0 auto 22px}.eyebrow{font-size:.58rem;letter-spacing:.18em;font-weight:800;color:#2f92ff}.studio-intro h1{font-size:clamp(2rem,7vw,4.6rem);line-height:.98;margin:8px 0 12px}.studio-intro p{color:#728199;font-size:.82rem;line-height:1.65;margin:0}.device-control{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:18px auto 20px}.device-control select{min-width:min(430px,100%);padding:14px 16px;border:1px solid rgba(10,31,68,.12);border-radius:16px;background:#fff;color:#0a1f44;font:inherit;font-weight:700;box-shadow:0 10px 30px rgba(36,79,143,.06)}.studio-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:24px;align-items:start}.visual-panel{position:sticky;top:86px}.visual-card{position:relative;overflow:hidden;border-radius:34px;border:1px solid rgba(46,127,255,.12);background:linear-gradient(145deg,#f8fdff,#f2f0ff);box-shadow:0 30px 80px rgba(24,55,105,.12);min-height:610px;display:grid;place-items:center}.visual-card:before,.visual-card:after{content:"";position:absolute;border-radius:50%;filter:blur(3px);pointer-events:none}.visual-card:before{width:300px;height:300px;right:-90px;top:-80px;background:radial-gradient(circle,rgba(64,190,255,.2),transparent 68%);animation:orb 8s ease-in-out infinite alternate}.visual-card:after{width:260px;height:260px;left:-100px;bottom:-90px;background:radial-gradient(circle,rgba(114,75,255,.16),transparent 68%);animation:orb 10s ease-in-out infinite alternate-reverse}.phone-stage-wrap{width:min(440px,86%);height:530px;display:grid;place-items:center;perspective:1200px;touch-action:pan-y}.phone-stage-wrap.is-3d{touch-action:none;cursor:grab}.phone-stage-wrap.is-3d:active{cursor:grabbing}.phone-stage{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .16s ease-out;will-change:transform}.visual-layer{position:absolute;left:50%;top:50%;max-width:none;pointer-events:none;user-select:none;transform-origin:center;filter:drop-shadow(0 18px 28px rgba(13,36,76,.16));transition:opacity .28s ease,transform .35s cubic-bezier(.2,.75,.2,1)}.base-phone{width:74%;height:90%;object-fit:contain;transform:translate(-50%,-50%) translateZ(0)}.accessory-layer{width:74%;height:90%;object-fit:contain}.visual-mode-badge{position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:24;display:none;align-items:center;padding:7px 10px;border-radius:999px;background:rgba(10,31,68,.8);color:#fff;font-size:.5rem;font-weight:800;letter-spacing:.08em;backdrop-filter:blur(12px);white-space:nowrap}.three-loading{font-size:.7rem;font-weight:800;color:#6f7d92}.phone-stage canvas{width:100%!important;height:100%!important;display:block;touch-action:none;user-select:none;-webkit-user-select:none}.stage-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:20;font-size:.57rem;color:#718096;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);padding:8px 11px;border-radius:999px;white-space:nowrap}.summary-bar{margin-top:13px;padding:14px 16px;border-radius:20px;background:#fff;border:1px solid rgba(10,31,68,.08);display:flex;align-items:center;justify-content:space-between;gap:12px}.summary-bar small{display:block;color:#7b8aa2;font-size:.58rem}.summary-bar strong{font-size:1.05rem}.control-panel{display:grid;gap:14px}.slot-tabs{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.slot-tabs::-webkit-scrollbar{display:none}.slot-tab{flex:0 0 auto;border:1px solid rgba(10,31,68,.09);background:#fff;color:#6f7d92;border-radius:999px;padding:10px 13px;font:inherit;font-size:.61rem;font-weight:800}.slot-tab.active{background:#0a1f44;color:#fff;border-color:#0a1f44}.accessory-list{display:grid;gap:10px}.accessory-card{display:grid;grid-template-columns:74px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px;border:1px solid rgba(10,31,68,.08);border-radius:20px;background:rgba(255,255,255,.88);box-shadow:0 12px 36px rgba(36,79,143,.05);transition:.25s ease}.accessory-card.selected{border-color:#2b8cff;box-shadow:0 14px 40px rgba(43,140,255,.14);transform:translateY(-2px)}.accessory-card img{width:74px;height:74px;object-fit:contain;border-radius:14px;background:#f6f8fb}.acc-main{min-width:0}.acc-main strong{display:block;font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.acc-main span{display:block;margin-top:5px;color:#2c8fff;font-size:.68rem;font-weight:800}.acc-main small{display:block;margin-top:4px;color:#8592a5;font-size:.55rem}.choose-acc{border:0;background:linear-gradient(135deg,#30bff1,#4b57ef 65%,#7a32ee);color:#fff;border-radius:999px;padding:10px 12px;font:inherit;font-size:.58rem;font-weight:800}.choose-acc.remove{background:#eef3f9;color:#506078}.empty{padding:26px;text-align:center;border:1px dashed rgba(10,31,68,.14);border-radius:20px;color:#7e8ba0;background:rgba(255,255,255,.65);font-size:.7rem;line-height:1.6}.selected-stack{padding:14px;border-radius:20px;background:#fff;border:1px solid rgba(10,31,68,.08)}.selected-stack h3{font-size:.75rem;margin:0 0 10px}.selected-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid #eef2f7;font-size:.6rem}.selected-row:first-of-type{border-top:0}.checkout-btn{width:100%;border:0;border-radius:999px;padding:15px 18px;background:linear-gradient(135deg,#25c4f2,#3a78ff 48%,#7a2bea);color:#fff;font:inherit;font-weight:800;box-shadow:0 16px 34px rgba(66,89,255,.22)}.checkout-btn:disabled{opacity:.45}.toast{position:fixed;left:50%;bottom:104px;transform:translate(-50%,20px);opacity:0;background:#0a1f44;color:#fff;padding:11px 15px;border-radius:999px;font-size:.64rem;font-weight:800;z-index:60;transition:.3s}.toast.show{opacity:1;transform:translate(-50%,0)}.bottom-nav{position:fixed;z-index:45;left:50%;bottom:max(10px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(660px,calc(100% - 24px));display:grid;grid-template-columns:repeat(3,1fr);padding:8px;background:rgba(255,255,255,.9);backdrop-filter:blur(18px);border:1px solid rgba(10,31,68,.07);border-radius:24px;box-shadow:0 14px 44px rgba(17,42,84,.14)}.bottom-nav a{display:grid;place-items:center;gap:3px;text-decoration:none;color:#7c8a9f;font-size:.54rem;padding:8px;border-radius:16px}.bottom-nav a.active{color:#258cff;background:#f1f8ff}.bottom-nav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8}@keyframes orb{to{transform:translate(30px,25px) scale(1.12)}}
+    @media(max-width:820px){.studio-shell{padding-left:14px;padding-right:14px}.studio-grid{grid-template-columns:1fr}.visual-panel{position:relative;top:auto}.visual-card{min-height:500px;border-radius:26px}.phone-stage-wrap{height:430px;width:min(370px,90%)}.control-panel{min-width:0}.accessory-card{grid-template-columns:64px minmax(0,1fr) auto}.accessory-card img{width:64px;height:64px}}
+    @media(max-width:460px){.studio-intro h1{font-size:2.35rem}.visual-card{min-height:460px}.phone-stage-wrap{height:395px}.base-phone,.accessory-layer{width:78%;height:90%}.accessory-card{grid-template-columns:58px minmax(0,1fr)}.accessory-card img{width:58px;height:58px}.choose-acc{grid-column:2;justify-self:start}.stage-hint{font-size:.52rem}.summary-bar{border-radius:17px}}
+    @media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body data-page="setup">
+<header class="studio-header">
+  <a class="brand" href="index.html"><img src="assets/img/hadi-mobile-icon.jpg" alt="HADI MOBILE"><div><strong>HADI MOBILE</strong><span>SETUP STUDIO</span></div></a>
+  <a class="back" href="index.html">← Back</a>
+</header>
+<main class="studio-shell">
+  <section class="studio-intro">
+    <span class="eyebrow">MY PHONE</span>
+    <h1>Build your setup.</h1>
+    <p>Choose your phone, add compatible accessories, and see the real product renders layered onto your device.</p>
+  </section>
+  <div class="device-control"><select id="deviceSelect"><option value="">Choose your phone</option></select></div>
+  <section class="studio-grid">
+    <div class="visual-panel">
+      <div class="visual-card">
+        <div class="phone-stage-wrap" id="stageWrap"><div class="phone-stage" id="phoneStage"><div class="empty" id="stageEmpty">Choose a configured phone to start.</div></div></div>
+        <div class="visual-mode-badge" id="visualModeBadge"></div><div class="stage-hint">Drag to explore your setup</div>
+      </div>
+      <div class="summary-bar"><div><small>YOUR SETUP</small><strong id="setupCount">0 accessories</strong></div><strong id="setupTotal">$0.00</strong></div>
+    </div>
+    <div class="control-panel">
+      <div class="slot-tabs" id="slotTabs"></div>
+      <div class="accessory-list" id="accessoryList"><div class="empty">Select your phone first.</div></div>
+      <div class="selected-stack" id="selectedStack"><h3>Selected accessories</h3><div class="empty">Your setup is empty.</div></div>
+      <button class="checkout-btn" id="addSetupBtn" disabled>Add setup to cart</button>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast">Setup added to cart</div>
+<nav class="bottom-nav"><a href="index.html"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3Z"/></svg><span>Home</span></a><a href="setup.html" class="active"><svg viewBox="0 0 24 24"><path d="M8 3h8v18H8zM4 8h4m8 0h4M4 16h4m8 0h4"/></svg><span>My Setup</span></a><a href="categories.html"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4Zm10 0h6v6h-6ZM4 14h6v6H4Zm10 0h6v6h-6Z"/></svg><span>Shop</span></a></nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
   }
 }
-function renderDeviceSelect(errorMessage=""){
-  const select=$("#deviceSelect");
-  if(!select)return;
-  if(errorMessage){
-    select.innerHTML=`<option value="">${esc(errorMessage)}</option>`;
-    select.disabled=true;
-    return;
-  }
-  select.disabled=false;
-  select.innerHTML='<option value="">'+(devices.length?'Choose your phone':'No Setup Studio phones found')+'</option>'+devices.map(d=>`<option value="${d.id}">${esc(d.phone_model)}</option>`).join("");
-  select.onchange=e=>chooseDevice(e.target.value);
-}
-function chooseDevice(id){activeDevice=devices.find(d=>String(d.id)===String(id))||null;Object.keys(selected).forEach(k=>delete selected[k]);if(activeDevice)localStorage.setItem("hadi_preferred_phone",activeDevice.phone_model);renderAll();}
-function deviceRenders(){return activeDevice?renders.filter(r=>String(r.device_id)===String(activeDevice.id)):[];}
-function slots(){return [...new Set(deviceRenders().map(r=>r.slot))].filter(Boolean);}
-function renderAll(){renderStage();renderTabs();renderAccessories();renderSelected();}
-
-function disposeThree(){
-  if(!three)return;
-  cancelAnimationFrame(three.raf||0);
-  three.controls?.dispose();three.renderer?.dispose();
-  three=null;
-}
-function renderStage(){
-  const stage=$("#phoneStage"); if(!stage)return;
-  disposeThree();
-  if(!activeDevice){stage.innerHTML='<div class="empty" id="stageEmpty">Choose a configured phone to start.</div>';setModeBadge("");return;}
-  if(canUseFull3D()) render3DStage(stage); else render2DStage(stage);
-}
-function setModeBadge(mode){const b=$("#visualModeBadge");if(!b)return;b.textContent=mode;b.style.display=mode?"inline-flex":"none";}
-function render2DStage(stage){
-  const base=activeDevice.base_image_url?`<img class="visual-layer base-phone" src="${activeDevice.base_image_url}" alt="${esc(activeDevice.phone_model)}">`:`<div class="empty">Upload a phone image fallback in Admin for 2D preview.</div>`;
-  const layers=[base];
-  selectedValues().forEach(sel=>{const r=sel.render;if(!r.image_url)return;layers.push(`<img class="visual-layer accessory-layer" src="${r.image_url}" alt="${esc(sel.product.name)}" style="left:${Number(r.pos_x)||50}%;top:${Number(r.pos_y)||50}%;z-index:${Number(r.z_index)||10};transform:translate(-50%,-50%) scale(${(Number(r.scale)||100)/100}) translateZ(${Math.max(1,Number(r.z_index)||10)}px)">`);});
-  stage.innerHTML=layers.join("");setModeBadge("REAL PRODUCT PREVIEW");
-}
-async function render3DStage(stage){
-  const token=++renderToken;stage.innerHTML='<div class="three-loading">Loading real 3D…</div>';setModeBadge("TRUE 3D · DRAG TO ROTATE");
-  const scene=new THREE.Scene();scene.background=null;
-  const camera=new THREE.PerspectiveCamera(32,1,.01,100);camera.position.set(0,.15,5);
-  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:false});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;stage.innerHTML="";stage.appendChild(renderer.domElement);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x9bb1d1,2.2));const key=new THREE.DirectionalLight(0xffffff,3.0);key.position.set(4,6,5);scene.add(key);const fill=new THREE.DirectionalLight(0xbfd9ff,1.8);fill.position.set(-4,2,3);scene.add(fill);
-  const root=new THREE.Group();scene.add(root);const loader=new GLTFLoader();
-  const loadModel=url=>new Promise((resolve,reject)=>loader.load(url,g=>resolve(g.scene),undefined,reject));
-  try{
-    const phone=await loadModel(activeDevice.base_model_url);if(token!==renderToken)return;normalizePhone(phone);root.add(phone);
-    for(const sel of selectedValues()){
-      const r=sel.render;const obj=await loadModel(r.model_url);if(token!==renderToken)return;
-      obj.position.set(Number(r.model_pos_x)||0,Number(r.model_pos_y)||0,Number(r.model_pos_z)||0);obj.scale.setScalar(Number(r.model_scale)||1);obj.rotation.set(THREE.MathUtils.degToRad(Number(r.model_rot_x)||0),THREE.MathUtils.degToRad(Number(r.model_rot_y)||0),THREE.MathUtils.degToRad(Number(r.model_rot_z)||0));root.add(obj);
-    }
-  }catch(err){console.error("3D load failed, falling back to image preview",err);if(token===renderToken)render2DStage(stage);return;}
-  const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.enablePan=false;controls.minDistance=2.6;controls.maxDistance=8;controls.target.set(0,0,0);
-  const resize=()=>{const r=stage.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix();};resize();
-  let raf=0;const animate=()=>{controls.update();renderer.render(scene,camera);raf=requestAnimationFrame(animate);};animate();three={renderer,controls,raf,resize};
-}
-function normalizePhone(obj){const box=new THREE.Box3().setFromObject(obj);const size=box.getSize(new THREE.Vector3());const center=box.getCenter(new THREE.Vector3());obj.position.sub(center);const max=Math.max(size.x,size.y,size.z)||1;obj.scale.setScalar(3.2/max);}
-
-function renderTabs(){const s=slots();if(s.length&&!s.includes(activeSlot))activeSlot=s[0];$("#slotTabs").innerHTML=s.map(x=>`<button class="slot-tab ${x===activeSlot?"active":""}" data-slot="${x}">${slotLabels[x]||x}</button>`).join("");$("#slotTabs").querySelectorAll("[data-slot]").forEach(b=>b.onclick=()=>{activeSlot=b.dataset.slot;renderTabs();renderAccessories();});}
-function renderAccessories(){
-  const box=$("#accessoryList");if(!activeDevice){box.innerHTML='<div class="empty">Select your phone first.</div>';return;}
-  const rows=deviceRenders().filter(r=>r.slot===activeSlot).map(r=>({render:r,product:products.find(p=>String(p.id)===String(r.product_id))})).filter(x=>x.product&&available(x.product)&&compatible(x.product,activeDevice.phone_model));
-  if(!rows.length){box.innerHTML=`<div class="empty">No ${esc((slotLabels[activeSlot]||activeSlot).toLowerCase())} visuals are configured for this phone yet.</div>`;return;}
-  box.innerHTML=rows.map(({render,product})=>{const chosen=selected[activeSlot]?.product.id===product.id;const tag=render.model_url?'3D + IMAGE':'REAL IMAGE';return `<article class="accessory-card ${chosen?"selected":""}"><img src="${mainImage(product)}" alt="${esc(product.name)}"><div class="acc-main"><strong>${esc(product.name)}</strong><span>${money(product.price)}</span><small>${chosen?"Shown on your phone":tag}</small></div><button class="choose-acc ${chosen?"remove":""}" data-render="${render.id}">${chosen?"Remove":"Try it"}</button></article>`;}).join("");
-  box.querySelectorAll("[data-render]").forEach(b=>b.onclick=()=>{const r=renders.find(x=>String(x.id)===String(b.dataset.render));if(!r)return;const p=products.find(x=>String(x.id)===String(r.product_id));if(!p)return;if(selected[activeSlot]?.product.id===p.id)delete selected[activeSlot];else selected[activeSlot]={render:r,product:p};renderAll();});
-}
-function renderSelected(){const vals=selectedValues(),box=$("#selectedStack");box.innerHTML='<h3>Selected accessories</h3>'+(vals.length?vals.map(x=>`<div class="selected-row"><span>${esc(slotLabels[x.render.slot]||x.render.slot)} · ${esc(x.product.name)}</span><strong>${money(x.product.price)}</strong></div>`).join(""):'<div class="empty">Your setup is empty.</div>');const total=vals.reduce((s,x)=>s+Number(x.product.price||0),0);$("#setupCount").textContent=`${vals.length} ${vals.length===1?"accessory":"accessories"}`;$("#setupTotal").textContent=money(total);$("#addSetupBtn").disabled=!vals.length;}
-function addToCart(){const vals=selectedValues();if(!vals.length)return;let cart=JSON.parse(localStorage.getItem("hadi_cart")||"[]")||[];vals.forEach(({product})=>{const phoneModel=product.has_phone_options?activeDevice.phone_model:"";const key=`${product.id}${phoneModel?`::${phoneModel}`:""}`;const existing=cart.find(x=>x.key===key);if(existing)existing.qty=(existing.qty||1)+1;else cart.push({key,id:product.id,name:product.name,phone_model:phoneModel,color_name:"",price:Number(product.price),image_url:mainImage(product),qty:1});});localStorage.setItem("hadi_cart",JSON.stringify(cart));const t=$("#toast");t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);}
-$("#addSetupBtn").onclick=addToCart;
-
-const wrap=$("#stageWrap"),stage=$("#phoneStage");function tilt(clientX,clientY){if(canUseFull3D())return;const r=wrap.getBoundingClientRect();const x=(clientX-r.left)/r.width-.5,y=(clientY-r.top)/r.height-.5;stage.style.transform=`rotateX(${-y*8}deg) rotateY(${x*10}deg) scale(1.015)`;}wrap.addEventListener("pointermove",e=>{if(e.pointerType==="mouse"||e.buttons)tilt(e.clientX,e.clientY);});wrap.addEventListener("pointerdown",e=>{wrap.setPointerCapture?.(e.pointerId);tilt(e.clientX,e.clientY);});wrap.addEventListener("pointerup",()=>stage.style.transform="");wrap.addEventListener("pointerleave",()=>stage.style.transform="");
-addEventListener("resize",()=>three?.resize?.());
-load();
+</script>
+<script type="module" src="assets/js/setup.js?v=11.5"></script>
+</body>
+</html>
