@@ -48,6 +48,14 @@
 <nav class="bottom-nav"><a href="index.html"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3Z"/></svg><span>Home</span></a><a href="setup.html" class="active"><svg viewBox="0 0 24 24"><path d="M8 3h8v18H8zM4 8h4m8 0h4M4 16h4m8 0h4"/></svg><span>My Setup</span></a><a href="categories.html"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4Zm10 0h6v6h-6ZM4 14h6v6H4Zm10 0h6v6h-6Z"/></svg><span>Shop</span></a></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/js/config.js"></script>
-<script type="module" src="assets/js/setup.js?v=11.3"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="assets/js/setup.js?v=11.4"></script>
 </body>
 </html>
