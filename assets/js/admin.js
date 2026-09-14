@@ -1,3 +1,4 @@
+const WHISH_LOGO_URL="https://upload.wikimedia.org/wikipedia/commons/e/e1/Logo_Whish_Money_%28Lebanon%29.png";
 const CFG=window.HADI_CONFIG;
 if(!CFG.SUPABASE_URL || CFG.SUPABASE_URL.startsWith("YOUR_")) location.href="login.html";
 const sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
@@ -63,7 +64,7 @@ function render(){
       const items=orderItems.filter(i=>String(i.order_id)===String(o.id));
       const address=[o.building,o.street,o.area,o.governorate].filter(Boolean).join(", ");
       const extras=[o.floor?`Floor/Apt: ${esc(o.floor)}`:"",o.landmark?`Landmark: ${esc(o.landmark)}`:"",o.note?`Note: ${esc(o.note)}`:""].filter(Boolean).join(" · ");
-      const payment=o.payment_method==="Whish Money"?`Whish Money · ${o.whish_paid_confirmed?"Customer says paid":"Not confirmed"}${o.whish_reference?` · Ref ${esc(o.whish_reference)}`:""}`:"Cash on Delivery";
+      const payment=o.payment_method==="Whish Money"?`<span style="display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap"><img src="${WHISH_LOGO_URL}" alt="Whish Money" style="height:22px;width:auto;max-width:78px;object-fit:contain"> <span>Whish Money · ${o.whish_paid_confirmed?"Customer says paid":"Not confirmed"}${o.whish_reference?` · Ref ${esc(o.whish_reference)}`:""}</span></span>`:"Cash on Delivery";
       const phoneDigits=String(o.phone||"").replace(/\D/g,"");
       const phone=phoneDigits.startsWith("0")?`961${phoneDigits.slice(1)}`:phoneDigits;
       const waMsg=encodeURIComponent(`Hello ${o.full_name}, this is HADI MOBILE regarding order ${o.order_code}.`);
