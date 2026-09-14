@@ -114,8 +114,8 @@ async function render3DStage(stage){
   const controls=new OrbitControls(camera,renderer.domElement);
   // Product-viewer style rotation: smooth, direct, and mobile friendly.
   controls.enableDamping=true;
-  controls.dampingFactor=0.075;
-  controls.rotateSpeed=0.62;
+  controls.dampingFactor=0.055;
+  controls.rotateSpeed=0.78;
   controls.enablePan=false;
   controls.enableZoom=true;
   controls.zoomSpeed=0.7;
@@ -126,6 +126,11 @@ async function render3DStage(stage){
   controls.touches.ONE=THREE.TOUCH.ROTATE;
   controls.touches.TWO=THREE.TOUCH.DOLLY_ROTATE;
   renderer.domElement.style.touchAction="none";
+  renderer.domElement.style.pointerEvents="auto";
+  renderer.domElement.style.cursor="grab";
+  renderer.domElement.addEventListener("pointerdown",()=>{renderer.domElement.style.cursor="grabbing";});
+  renderer.domElement.addEventListener("pointerup",()=>{renderer.domElement.style.cursor="grab";});
+  renderer.domElement.addEventListener("pointercancel",()=>{renderer.domElement.style.cursor="grab";});
   const resize=()=>{const r=stage.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix();};resize();
   let raf=0;
   const animate=()=>{
@@ -150,6 +155,26 @@ function renderSelected(){const vals=selectedValues(),box=$("#selectedStack");bo
 function addToCart(){const vals=selectedValues();if(!vals.length)return;let cart=JSON.parse(localStorage.getItem("hadi_cart")||"[]")||[];vals.forEach(({product})=>{const phoneModel=product.has_phone_options?activeDevice.phone_model:"";const key=`${product.id}${phoneModel?`::${phoneModel}`:""}`;const existing=cart.find(x=>x.key===key);if(existing)existing.qty=(existing.qty||1)+1;else cart.push({key,id:product.id,name:product.name,phone_model:phoneModel,color_name:"",price:Number(product.price),image_url:mainImage(product),qty:1});});localStorage.setItem("hadi_cart",JSON.stringify(cart));const t=$("#toast");t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);}
 $("#addSetupBtn").onclick=addToCart;
 
-const wrap=$("#stageWrap"),stage=$("#phoneStage");function tilt(clientX,clientY){if(canUseFull3D())return;const r=wrap.getBoundingClientRect();const x=(clientX-r.left)/r.width-.5,y=(clientY-r.top)/r.height-.5;stage.style.transform=`rotateX(${-y*8}deg) rotateY(${x*10}deg) scale(1.015)`;}wrap.addEventListener("pointermove",e=>{if(e.pointerType==="mouse"||e.buttons)tilt(e.clientX,e.clientY);});wrap.addEventListener("pointerdown",e=>{wrap.setPointerCapture?.(e.pointerId);tilt(e.clientX,e.clientY);});wrap.addEventListener("pointerup",()=>stage.style.transform="");wrap.addEventListener("pointerleave",()=>stage.style.transform="");
+const wrap=$("#stageWrap"),stage=$("#phoneStage");
+function tilt(clientX,clientY){
+  // 2D fallback only. Never interfere with the real 3D canvas / OrbitControls.
+  if(canUseFull3D())return;
+  const r=wrap.getBoundingClientRect();
+  const x=(clientX-r.left)/r.width-.5,y=(clientY-r.top)/r.height-.5;
+  stage.style.transform=`rotateX(${-y*8}deg) rotateY(${x*10}deg) scale(1.015)`;
+}
+wrap.addEventListener("pointermove",e=>{
+  if(canUseFull3D())return;
+  if(e.pointerType==="mouse"||e.buttons)tilt(e.clientX,e.clientY);
+});
+wrap.addEventListener("pointerdown",e=>{
+  // IMPORTANT: do not capture the pointer in 3D mode. Pointer capture on the
+  // wrapper steals pointermove events from OrbitControls after the initial drag.
+  if(canUseFull3D())return;
+  wrap.setPointerCapture?.(e.pointerId);
+  tilt(e.clientX,e.clientY);
+});
+wrap.addEventListener("pointerup",()=>{if(!canUseFull3D())stage.style.transform="";});
+wrap.addEventListener("pointerleave",()=>{if(!canUseFull3D())stage.style.transform="";});
 addEventListener("resize",()=>three?.resize?.());
 load();
