@@ -20,23 +20,55 @@ function selectedValues(){return Object.values(selected);}
 function canUseFull3D(){return !!(activeDevice?.base_model_url && selectedValues().every(x=>x.render.model_url));}
 
 async function load(){
-  const [d,r,p,o,i]=await Promise.all([
-    sb.from("setup_devices").select("*").eq("is_active",true).order("sort_order"),
-    sb.from("setup_product_renders").select("*").eq("is_active",true),
+  // Load Setup Studio devices FIRST and independently. The phone dropdown
+  // must come directly from Admin → Setup Studio, not from product compatibility.
+  const deviceRes = await sb.from("setup_devices").select("*");
+  if(deviceRes.error){
+    console.error("Setup devices load failed:", deviceRes.error);
+    devices=[];
+    renderDeviceSelect(deviceRes.error.message||"Could not load configured phones");
+    renderAll();
+    return;
+  }
+
+  devices=(deviceRes.data||[])
+    .filter(d=>d.is_active!==false)
+    .sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
+
+  // Render the selector immediately so configured phones are visible even if
+  // an unrelated products/accessories query has a problem.
+  renderDeviceSelect();
+
+  const [r,p,o,i]=await Promise.all([
+    sb.from("setup_product_renders").select("*"),
     sb.from("products").select("*").eq("is_active",true),
     sb.from("product_phone_options").select("*"),
     sb.from("product_images").select("*").order("sort_order")
   ]);
-  [d,r,p,o,i].forEach(x=>{if(x.error)console.error(x.error);});
-  devices=d.data||[];renders=r.data||[];products=p.data||[];phoneOptions=o.data||[];images=i.data||[];
-  renderDeviceSelect();
+  [r,p,o,i].forEach(x=>{if(x.error)console.error(x.error);});
+  renders=(r.data||[]).filter(x=>x.is_active!==false);
+  products=p.data||[];phoneOptions=o.data||[];images=i.data||[];
+
   const preferred=localStorage.getItem("hadi_preferred_phone")||"";
   const start=devices.find(x=>x.phone_model===preferred)||devices[0];
-  if(start){$("#deviceSelect").value=start.id;chooseDevice(start.id);}else renderAll();
+  if(start){
+    $("#deviceSelect").value=String(start.id);
+    chooseDevice(start.id);
+  }else{
+    renderAll();
+  }
 }
-function renderDeviceSelect(){
-  $("#deviceSelect").innerHTML='<option value="">Choose your phone</option>'+devices.map(d=>`<option value="${d.id}">${esc(d.phone_model)}</option>`).join("");
-  $("#deviceSelect").onchange=e=>chooseDevice(e.target.value);
+function renderDeviceSelect(errorMessage=""){
+  const select=$("#deviceSelect");
+  if(!select)return;
+  if(errorMessage){
+    select.innerHTML=`<option value="">${esc(errorMessage)}</option>`;
+    select.disabled=true;
+    return;
+  }
+  select.disabled=false;
+  select.innerHTML='<option value="">Choose your phone</option>'+devices.map(d=>`<option value="${d.id}">${esc(d.phone_model)}</option>`).join("");
+  select.onchange=e=>chooseDevice(e.target.value);
 }
 function chooseDevice(id){activeDevice=devices.find(d=>String(d.id)===String(id))||null;Object.keys(selected).forEach(k=>delete selected[k]);if(activeDevice)localStorage.setItem("hadi_preferred_phone",activeDevice.phone_model);renderAll();}
 function deviceRenders(){return activeDevice?renders.filter(r=>String(r.device_id)===String(activeDevice.id)):[];}
