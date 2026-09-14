@@ -130,6 +130,16 @@
         <div class="drawer-head"><strong>Colors</strong><button class="mini-btn" id="addColorOption" type="button">+ Add color</button></div>
         <div id="colorOptionsRows"></div>
       </div>
+
+      <label class="option-toggle">
+        <input id="productHasStorage" type="checkbox">
+        <span><strong>Storage variants</strong><small>e.g. 256GB, 512GB, 1TB</small></span>
+      </label>
+      <div class="option-drawer hidden" id="storageOptionsDrawer">
+        <div class="drawer-head"><strong>Storage options</strong><button class="mini-btn" id="addStorageOption" type="button">+ Add storage</button></div>
+        <div id="storageOptionsRows"></div>
+        <small style="display:block;margin-top:8px;color:var(--muted)">Price override is optional. Leave it empty to use the product's main price.</small>
+      </div>
     </div>
 
     <button class="gold-btn full" type="submit">Save product</button><div class="message" id="productMsg"></div>
