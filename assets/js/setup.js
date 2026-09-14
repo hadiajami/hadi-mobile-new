@@ -1,6 +1,6 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/controls/OrbitControls.js";
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const CFG=window.HADI_CONFIG;
 const sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
@@ -67,7 +67,7 @@ function renderDeviceSelect(errorMessage=""){
     return;
   }
   select.disabled=false;
-  select.innerHTML='<option value="">Choose your phone</option>'+devices.map(d=>`<option value="${d.id}">${esc(d.phone_model)}</option>`).join("");
+  select.innerHTML='<option value="">'+(devices.length?'Choose your phone':'No Setup Studio phones found')+'</option>'+devices.map(d=>`<option value="${d.id}">${esc(d.phone_model)}</option>`).join("");
   select.onchange=e=>chooseDevice(e.target.value);
 }
 function chooseDevice(id){activeDevice=devices.find(d=>String(d.id)===String(id))||null;Object.keys(selected).forEach(k=>delete selected[k]);if(activeDevice)localStorage.setItem("hadi_preferred_phone",activeDevice.phone_model);renderAll();}
