@@ -37,7 +37,12 @@ button,input,select{font:inherit}.studio-header{position:sticky;top:0;z-index:40
 .bottom-nav{position:fixed;z-index:45;left:50%;bottom:max(10px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(660px,calc(100% - 24px));display:grid;grid-template-columns:repeat(3,1fr);padding:8px;background:rgba(255,255,255,.92);backdrop-filter:blur(18px);border:1px solid rgba(10,31,68,.07);border-radius:24px;box-shadow:0 14px 44px rgba(17,42,84,.14)}.bottom-nav a{display:grid;place-items:center;gap:3px;text-decoration:none;color:#7c8a9f;font-size:.54rem;padding:8px;border-radius:16px}.bottom-nav a.active{color:#258cff;background:#f1f8ff}.bottom-nav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8}
 @media(max-width:820px){.shell{padding:16px 12px 36px}.grid{grid-template-columns:1fr}.viewer-column{position:relative;top:auto}.viewer{min-height:520px;border-radius:25px}.panel{margin-top:2px}.intro h1{font-size:2.35rem}.viewer-tools{bottom:12px}.hint{bottom:68px}}
 @media(max-width:460px){.viewer{min-height:500px}.shell{padding-left:10px;padding-right:10px}.sliders{grid-template-columns:1fr}.studio-header{padding-left:12px;padding-right:12px}}
-</style>
+
+.selection-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 18px}.selection-card{padding:14px 15px;border:1px solid rgba(10,31,68,.08);background:#fff;border-radius:18px;box-shadow:0 10px 28px rgba(36,79,143,.045)}.selection-card>span{display:block;font-size:.48rem;font-weight:900;letter-spacing:.12em;color:#2b8cff;margin-bottom:4px}.selection-card strong{display:block;font-size:.72rem;margin-bottom:8px}.selection-card select{width:100%;border:1px solid #e1e8f1;border-radius:11px;padding:9px 10px;background:#f9fbfe;color:#0a1f44;font-size:.59rem;font-weight:750}.case-choice div{padding:9px 10px;border-radius:11px;background:linear-gradient(135deg,#f1fbff,#f4efff);font-size:.6rem;font-weight:800;color:#0a1f44}
+@media(max-width:600px){.selection-grid{grid-template-columns:1fr}.selection-card{padding:13px}}
+
+.loader-ui,.load-error{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:7px;text-align:center;color:#6e7d93;font-size:.7rem}.loader-ui strong,.load-error strong{color:#0a1f44;font-size:.72rem}.loader-ui small,.load-error small{font-size:.53rem}.spinner{width:28px;height:28px;border:3px solid #dce8f6;border-top-color:#347dff;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.load-error button{border:0;border-radius:999px;padding:9px 15px;background:#0a1f44;color:#fff;font-size:.58rem;font-weight:800}.edit-floating{position:absolute;z-index:11;left:50%;bottom:76px;transform:translate(-50%,12px);opacity:0;pointer-events:none;width:min(360px,calc(100% - 32px));display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:9px;border-radius:17px;background:rgba(255,255,255,.94);backdrop-filter:blur(15px);box-shadow:0 12px 34px rgba(16,43,84,.15);border:1px solid rgba(10,31,68,.07);transition:.2s}.edit-floating.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}.edit-slider{display:grid;gap:3px}.edit-slider span{font-size:.45rem;font-weight:900;letter-spacing:.08em;color:#718096}.edit-slider input{width:100%;accent-color:#2b8cff}.mini-edit{height:29px;border:0;border-radius:9px;background:#f1f5fa;color:#0a1f44;font-weight:900}.viewer-tools{z-index:12}
+.selection-grid.single{grid-template-columns:minmax(0,620px);justify-content:center}.selection-note{display:block;margin-top:7px;color:#7b8aa2;font-size:.5rem;line-height:1.35}.selection-card select{appearance:auto}</style>
 </head>
 <body>
 <header class="studio-header">
@@ -47,7 +52,9 @@ button,input,select{font:inherit}.studio-header{position:sticky;top:0;z-index:40
 
 <main class="shell">
 <section class="intro"><span class="eyebrow">MAKE IT YOURS</span><h1>Customize your case.</h1><p>Choose your case color, add a photo or your own text, then position everything directly on the live 3D preview.</p></section>
-<div class="phone-select"><select id="deviceSelect"><option value="">Choose your phone</option></select></div>
+<div class="selection-grid single">
+  <div class="selection-card"><span>CHOOSE YOUR CASE</span><strong>Case for your phone</strong><select id="deviceSelect"><option value="">Choose a case</option></select><small class="selection-note" id="caseChoice">Select the phone model you need a case for.</small></div>
+</div>
 
 <section class="grid">
 <div class="viewer-column">
@@ -55,7 +62,8 @@ button,input,select{font:inherit}.studio-header{position:sticky;top:0;z-index:40
     <div class="stage" id="stage"><div style="display:grid;place-items:center;height:100%;font-size:.7rem;color:#748197">Loading case…</div></div>
     <div class="badge">LIVE 3D PREVIEW</div>
     <div class="zoom-pop"><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button></div>
-    <div class="hint" id="hint">Drag the case to rotate • pinch to zoom</div>
+    <div class="hint" id="hint">Drag to rotate • pinch to zoom</div>
+    <div class="edit-floating" id="editFloating"><div class="edit-slider"><span>SIZE</span><input id="viewerSize" type="range" min="20" max="300" value="100"></div><div class="edit-slider"><span>ROTATE</span><input id="viewerRotate" type="range" min="-180" max="180" value="0"></div><button class="mini-edit" data-nudge="0,-8">↑</button><button class="mini-edit" data-nudge="-8,0">←</button><button class="mini-edit" data-nudge="0,8">↓</button><button class="mini-edit" data-nudge="8,0">→</button></div>
     <div class="viewer-tools">
       <button class="tool active" id="orbitTool" title="Rotate case"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 3-6M4 4v5h5"/></svg></button>
       <button class="tool" id="editTool" title="Move artwork"><svg viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M12 2l-3 3m3-3 3 3M12 22l-3-3m3 3 3-3M2 12l3-3m-3 3 3 3M22 12l-3-3m3 3-3 3"/></svg></button>
@@ -68,15 +76,15 @@ button,input,select{font:inherit}.studio-header{position:sticky;top:0;z-index:40
 
 <div class="panel">
   <div class="card">
-    <div class="section-title"><h3>Case color</h3><span>ANY COLOR</span></div>
+    <div class="section-title"><h3>Case finish</h3><span>CHOOSE ANY COLOR</span></div>
     <div class="swatches" id="swatches"></div>
   </div>
 
   <div class="card">
-    <div class="section-title"><h3>Add your design</h3><span>IMAGE + TEXT</span></div>
+    <div class="section-title"><h3>Your design</h3><span>IMAGE + TEXT</span></div>
     <div class="tabs"><button class="tab active" data-pane="imagePane">Image</button><button class="tab" data-pane="textPane">Text</button></div>
     <div class="pane active" id="imagePane">
-      <label class="upload">＋ Upload image <small>JPG, PNG or WEBP</small><input id="imageUpload" type="file" accept="image/jpeg,image/png,image/webp"></label>
+      <label class="upload">＋ Upload your image <small>JPG, PNG or WEBP · max 10 MB</small><input id="imageUpload" type="file" accept="image/jpeg,image/png,image/webp"></label>
     </div>
     <div class="pane" id="textPane">
       <div class="text-row">
@@ -108,7 +116,7 @@ button,input,select{font:inherit}.studio-header{position:sticky;top:0;z-index:40
   </div>
 
   <div class="card order">
-    <div><small>CUSTOM CASE</small><strong id="caseSummary">iPhone 17 Pro • White</strong></div>
+    <div><small>CUSTOM CASE</small><strong id="caseSummary">iPhone 17 Pro Case • White</strong></div>
     <button class="cart" id="addCart">Add to cart</button>
   </div>
 </div>
@@ -124,6 +132,6 @@ button,input,select{font:inherit}.studio-header{position:sticky;top:0;z-index:40
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/js/config.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"}}</script>
-<script type="module" src="assets/js/setup.js?v=13.0"></script>
+<script type="module" src="assets/js/setup.js?v=14.0"></script>
 </body>
 </html>
