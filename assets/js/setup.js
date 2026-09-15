@@ -12,6 +12,9 @@ let activeDevice=null,activeSlot="case";
 const selected={};
 const slotLabels={case:"Cases",screen:"Screen",camera:"Camera",charger:"Charging",other:"More"};
 let three=null,renderToken=0;
+let caseColor="#f1f1ef";
+let designImage=null, designTexture=null, designCanvas=null, designCtx=null, designMesh=null;
+let designState={zoom:100,rotate:0,x:0,y:0};
 
 function mainImage(p){const rows=images.filter(i=>String(i.product_id)===String(p.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));return rows.find(i=>i.is_primary)?.image_url||rows[0]?.image_url||p.image_url||"assets/img/hadi-mobile-logo.jpg";}
 function compatible(p,model){if(!p.has_phone_options)return true;return phoneOptions.some(o=>String(o.product_id)===String(p.id)&&o.phone_model===model&&o.in_stock);}
@@ -105,7 +108,12 @@ async function render3DStage(stage){
   const root=new THREE.Group();scene.add(root);const loader=new GLTFLoader();
   const loadModel=url=>new Promise((resolve,reject)=>loader.load(url,g=>resolve(g.scene),undefined,reject));
   try{
-    const phone=await loadModel(activeDevice.base_model_url);if(token!==renderToken)return;normalizePhone(phone);root.add(phone);
+    const bundled17=/iphone\s*17\s*pro/i.test(activeDevice.phone_model||"")?"assets/models/iphone_17_pro_case_master.glb":"";
+    const modelUrl=bundled17||activeDevice.base_model_url;
+    const phone=await loadModel(modelUrl);if(token!==renderToken)return;
+    applyCaseColor(phone);
+    if(bundled17) attachDesignSurface(phone);
+    normalizePhone(phone);root.add(phone);
     for(const sel of selectedValues()){
       const r=sel.render;const obj=await loadModel(r.model_url);if(token!==renderToken)return;
       obj.position.set(Number(r.model_pos_x)||0,Number(r.model_pos_y)||0,Number(r.model_pos_z)||0);obj.scale.setScalar(Number(r.model_scale)||1);obj.rotation.set(THREE.MathUtils.degToRad(Number(r.model_rot_x)||0),THREE.MathUtils.degToRad(Number(r.model_rot_y)||0),THREE.MathUtils.degToRad(Number(r.model_rot_z)||0));root.add(obj);
@@ -139,9 +147,51 @@ async function render3DStage(stage){
     raf=requestAnimationFrame(animate);
   };
   animate();
-  three={renderer,controls,raf,resize};
+  three={renderer,controls,raf,resize,root};
 }
 function normalizePhone(obj){const box=new THREE.Box3().setFromObject(obj);const size=box.getSize(new THREE.Vector3());const center=box.getCenter(new THREE.Vector3());obj.position.sub(center);const max=Math.max(size.x,size.y,size.z)||1;obj.scale.setScalar(3.2/max);}
+
+
+function applyCaseColor(obj){
+  const c=new THREE.Color(caseColor);
+  obj.traverse(ch=>{
+    if(!ch.isMesh||ch===designMesh)return;
+    const n=(ch.name||"").toLowerCase();
+    if(n.includes("camera control"))return;
+    if(Array.isArray(ch.material)) ch.material=ch.material.map(m=>{const x=m.clone();if(x.color)x.color.copy(c);x.roughness=.72;x.metalness=.02;return x;});
+    else if(ch.material){const x=ch.material.clone();if(x.color)x.color.copy(c);x.roughness=.72;x.metalness=.02;ch.material=x;}
+  });
+}
+function attachDesignSurface(phone){
+  designCanvas=document.createElement("canvas");designCanvas.width=1000;designCanvas.height=1500;designCtx=designCanvas.getContext("2d");
+  designTexture=new THREE.CanvasTexture(designCanvas);designTexture.colorSpace=THREE.SRGBColorSpace;designTexture.anisotropy=4;
+  const mat=new THREE.MeshBasicMaterial({map:designTexture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,side:THREE.DoubleSide});
+  const geo=new THREE.PlaneGeometry(69.0,103.0,1,1);
+  designMesh=new THREE.Mesh(geo,mat);designMesh.name="HADI_CUSTOM_ARTWORK";
+  // Back printable zone ends below the iPhone 17 Pro camera plateau.
+  designMesh.position.set(0,-21.8,6.355);
+  designMesh.renderOrder=10;phone.add(designMesh);drawDesign();
+}
+function drawDesign(){
+  if(!designCtx||!designCanvas||!designTexture)return;
+  const w=designCanvas.width,h=designCanvas.height;designCtx.clearRect(0,0,w,h);
+  if(!designImage){designTexture.needsUpdate=true;return;}
+  designCtx.save();designCtx.translate(w/2+(designState.x/100)*(w*.34),h/2+(designState.y/100)*(h*.34));designCtx.rotate(designState.rotate*Math.PI/180);
+  const base=Math.max(w/designImage.width,h/designImage.height);const scale=base*(designState.zoom/100);
+  const iw=designImage.width*scale,ih=designImage.height*scale;designCtx.drawImage(designImage,-iw/2,-ih/2,iw,ih);designCtx.restore();designTexture.needsUpdate=true;
+}
+function refreshCaseColor(){
+  if(!three?.root)return;
+  applyCaseColor(three.root);
+}
+function initCustomizer(){
+  document.querySelectorAll("[data-case-color]").forEach(b=>b.onclick=()=>{caseColor=b.dataset.caseColor;document.querySelectorAll("[data-case-color]").forEach(x=>x.classList.toggle("active",x===b));refreshCaseColor();});
+  const up=$("#designUpload");if(up)up.onchange=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{designImage=img;designState={zoom:100,rotate:0,x:0,y:0};syncDesignControls();drawDesign();};img.src=r.result;};r.readAsDataURL(f);};
+  [["designZoom","zoom"],["designRotate","rotate"],["designX","x"],["designY","y"]].forEach(([id,k])=>{const el=$("#"+id);if(el)el.oninput=()=>{designState[k]=Number(el.value);drawDesign();};});
+  $("#resetDesign")?.addEventListener("click",()=>{designState={zoom:100,rotate:0,x:0,y:0};syncDesignControls();drawDesign();});
+  $("#removeDesign")?.addEventListener("click",()=>{designImage=null;if(up)up.value="";drawDesign();});
+}
+function syncDesignControls(){[["designZoom","zoom"],["designRotate","rotate"],["designX","x"],["designY","y"]].forEach(([id,k])=>{const el=$("#"+id);if(el)el.value=designState[k];});}
 
 function renderTabs(){const s=slots();if(s.length&&!s.includes(activeSlot))activeSlot=s[0];$("#slotTabs").innerHTML=s.map(x=>`<button class="slot-tab ${x===activeSlot?"active":""}" data-slot="${x}">${slotLabels[x]||x}</button>`).join("");$("#slotTabs").querySelectorAll("[data-slot]").forEach(b=>b.onclick=()=>{activeSlot=b.dataset.slot;renderTabs();renderAccessories();});}
 function renderAccessories(){
@@ -177,4 +227,5 @@ wrap.addEventListener("pointerdown",e=>{
 wrap.addEventListener("pointerup",()=>{if(!canUseFull3D())stage.style.transform="";});
 wrap.addEventListener("pointerleave",()=>{if(!canUseFull3D())stage.style.transform="";});
 addEventListener("resize",()=>three?.resize?.());
+initCustomizer();
 load();
