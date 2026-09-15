@@ -38,18 +38,16 @@ function initUI(){
  sw.innerHTML=COLORS.map(([n,c],i)=>`<button class="swatch ${i===1?"active":""}" data-color="${c}" style="background:${c}" title="${n}" aria-label="${n}"></button>`).join("")+`<label class="swatch custom-swatch" title="Custom color"><input id="customColor" type="color" value="${caseColor}" aria-label="Custom case color"></label>`;
  $("#fontSelect").innerHTML=FONTS.map(f=>`<option value="${esc(f)}" style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("");
  document.querySelectorAll(".swatch[data-color]").forEach(b=>b.onclick=()=>setCaseColor(b.dataset.color,b));
- $("#customColor").oninput=e=>setCaseColor(e.target.value,null);
- $("#viewerColor").oninput=e=>setCaseColor(e.target.value,null);
+ $("#customColor").oninput=e=>setCaseColor(e.target.value,null);$("#viewerColor").oninput=e=>setCaseColor(e.target.value,null);
  document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".pane").forEach(x=>x.classList.toggle("active",x.id===b.dataset.pane))});
- $("#imageUpload").addEventListener("change",handleImageUpload);
- $("#addText").onclick=addText;
- $("#textInput").addEventListener("keydown",e=>{if(e.key==="Enter")addText()});
- $("#orbitTool").onclick=()=>setMode("orbit");$("#editTool").onclick=()=>setMode("edit");$("#fitView").onclick=resetView;
- $("#zoomIn").onclick=()=>dolly(.82);$("#zoomOut").onclick=()=>dolly(1.2);
- $("#addCart").onclick=saveCustomCase;
- $("#deleteLayer").onclick=deleteSelected;$("#duplicateLayer").onclick=duplicateSelected;$("#centerLayer").onclick=centerSelected;
- ["sizeRange","rotateRange","viewerSize","viewerRotate"].forEach(id=>$("#"+id)?.addEventListener("input",syncEditFromUI));
- document.querySelectorAll("[data-nudge]").forEach(b=>b.onclick=()=>{const l=selected();if(!l)return;const [dx,dy]=b.dataset.nudge.split(",").map(Number);l.x+=dx;l.y+=dy;syncEditUI();drawArtwork()});
+ $("#imageUpload").addEventListener("change",handleImageUpload);$("#addText").onclick=addText;$("#textInput").addEventListener("keydown",e=>{if(e.key==="Enter")addText()});
+ $("#orbitTool").onclick=()=>setMode("orbit");$("#editTool").onclick=()=>setMode("edit");$("#fitView").onclick=resetView;$("#zoomIn").onclick=()=>dolly(.82);$("#zoomOut").onclick=()=>dolly(1.2);
+ $("#backViewBtn").onclick=()=>setBackView(false);$("#fullscreenBtn").onclick=openFullscreen;$("#fsClose").onclick=closeFullscreen;$("#fsBackView").onclick=()=>setBackView(true);$("#fsZoomIn").onclick=()=>dolly(.82);$("#fsZoomOut").onclick=()=>dolly(1.2);
+ $("#fsDelete").onclick=deleteSelected;$("#fsCenter").onclick=centerSelected;$("#fsSize").oninput=e=>setSelectedSize(+e.target.value);$("#fsRotate").oninput=e=>setSelectedRotation(+e.target.value);
+ document.querySelectorAll("[data-fs-nudge]").forEach(b=>b.onclick=()=>{const l=selected();if(!l)return;const [x,y]=b.dataset.fsNudge.split(",").map(Number);l.x+=x*12;l.y+=y*12;drawArtwork();syncEditUI()});
+ $("#addCart").onclick=saveCustomCase;$("#deleteLayer").onclick=deleteSelected;$("#duplicateLayer").onclick=duplicateSelected;$("#centerLayer").onclick=centerSelected;
+ ["sizeRange","rotateRange"].forEach(id=>$("#"+id)?.addEventListener("input",e=>{if(e.target.id==="sizeRange")setSelectedSize(+e.target.value);else setSelectedRotation(+e.target.value)}));
+ document.querySelectorAll("[data-nudge]").forEach(b=>b.onclick=()=>{const l=selected();if(!l)return;const [dx,dy]=b.dataset.nudge.split(",").map(Number);l.x+=dx;l.y+=dy;drawArtwork();syncEditUI()});
 }
 function setCaseColor(c,b){caseColor=c;$("#viewerColor").value=c;$("#customColor").value=c;document.querySelectorAll(".swatch[data-color]").forEach(x=>x.classList.toggle("active",x===b));applyCaseColor();updateSummary()}
 function applyCaseColor(){if(!caseModel)return;const c=new THREE.Color(caseColor);caseModel.traverse(ch=>{if(!ch.isMesh||ch===artMesh)return;const n=(ch.name||"").toLowerCase();if(n.includes("camera control"))return;const old=Array.isArray(ch.material)?ch.material:[ch.material];const mats=old.map(m=>{const x=m.clone();if(x.color)x.color.copy(c);x.roughness=.72;x.metalness=.015;return x});ch.material=mats.length===1?mats[0]:mats})}
@@ -67,7 +65,7 @@ async function loadCase(){
  const rim=new THREE.DirectionalLight(0xffffff,1.1);rim.position.set(0,-5,-4);scene.add(rim);
  try{
   const url=/iphone\s*17\s*pro/i.test(activeDevice?.phone_model||"")?MASTER:(activeDevice?.base_model_url||MASTER);
-  const buf=await fetch(`${url}${url.includes("?")?"&":"?"}v=14`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.arrayBuffer()});
+  const buf=await fetch(`${url}${url.includes("?")?"&":"?"}v=15`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.arrayBuffer()});
   const gltf=await new Promise((resolve,reject)=>loader.parse(buf,"",resolve,reject));
   caseModel=gltf.scene;
   const box=new THREE.Box3().setFromObject(caseModel);const center=box.getCenter(new THREE.Vector3());const size=box.getSize(new THREE.Vector3());
@@ -80,12 +78,11 @@ async function loadCase(){
  cancelAnimationFrame(raf);animate();setMode(mode);
 }
 function createArtworkSurface(){
- canvas=document.createElement("canvas");canvas.width=1000;canvas.height=1100;ctx=canvas.getContext("2d");
+ canvas=document.createElement("canvas");canvas.width=1000;canvas.height=1500;ctx=canvas.getContext("2d");
  artTexture=new THREE.CanvasTexture(canvas);artTexture.colorSpace=THREE.SRGBColorSpace;artTexture.anisotropy=renderer.capabilities.getMaxAnisotropy();
- // The master case is approximately 76.3mm wide x 154.2mm high. The printable area intentionally ends below the camera plateau.
- const geo=new THREE.PlaneGeometry(68,76);
- const mat=new THREE.MeshBasicMaterial({map:artTexture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-6,side:THREE.DoubleSide});
- artMesh=new THREE.Mesh(geo,mat);artMesh.name="CUSTOM_PRINT_SURFACE";artMesh.position.set(0,-34.5,6.335);artMesh.renderOrder=50;caseModel.add(artMesh);drawArtwork();
+ const geo=new THREE.PlaneGeometry(67.5,108);
+ const mat=new THREE.MeshBasicMaterial({map:artTexture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-8,side:THREE.DoubleSide});
+ artMesh=new THREE.Mesh(geo,mat);artMesh.name="CUSTOM_PRINT_SURFACE";artMesh.position.set(0,-10,-7.62);artMesh.renderOrder=50;caseModel.add(artMesh);drawArtwork();
 }
 function drawArtwork(){if(!ctx)return;ctx.clearRect(0,0,canvas.width,canvas.height);for(const l of layers){ctx.save();ctx.translate(l.x,l.y);ctx.rotate(l.rotation*Math.PI/180);ctx.globalAlpha=l.opacity??1;if(l.type==="image"&&l.image){const fit=Math.min(720/l.image.width,760/l.image.height);const w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;ctx.drawImage(l.image,-w/2,-h/2,w,h)}else if(l.type==="text"){const size=105*l.scale;ctx.fillStyle=l.color;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`700 ${size}px "${l.font}"`;ctx.fillText(l.text,0,0,900)}ctx.restore()}artTexture.needsUpdate=true}
 async function handleImageUpload(e){const f=e.target.files?.[0];if(!f)return;if(f.size>10*1024*1024){toast("Image must be under 10 MB");e.target.value="";return}if(!/^image\/(jpeg|png|webp)$/.test(f.type)){toast("Use JPG, PNG or WEBP");e.target.value="";return}try{const url=URL.createObjectURL(f);const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>{URL.revokeObjectURL(url);res(im)};im.onerror=rej;im.src=url});const l={id:uid(),type:"image",name:f.name,image:img,x:canvas.width/2,y:canvas.height/2,scale:1,rotation:0,opacity:1};layers.push(l);selectLayer(l.id);drawArtwork();setMode("edit");toast("Image added — drag it on the case")}catch(err){console.error(err);toast("Could not read that image")}finally{e.target.value=""}}
@@ -99,13 +96,21 @@ function duplicateSelected(){const l=selected();if(!l)return;const c={...l,id:ui
 function centerSelected(){const l=selected();if(!l)return;l.x=canvas.width/2;l.y=canvas.height/2;drawArtwork()}
 function setMode(m){mode=m;$("#orbitTool").classList.toggle("active",m==="orbit");$("#editTool").classList.toggle("active",m==="edit");if(controls)controls.enabled=m==="orbit";$("#editFloating").classList.toggle("show",m==="edit");$("#hint").textContent=m==="orbit"?"Drag to rotate • pinch to zoom":"Drag the selected design directly on the case"}
 function artPointerDown(e){if(mode!=="edit"||!selected())return;drag={x:e.clientX,y:e.clientY,lx:selected().x,ly:selected().y};try{renderer.domElement.setPointerCapture(e.pointerId)}catch{}}
-function artPointerMove(e){if(!drag||mode!=="edit")return;const l=selected();if(!l)return;const r=renderer.domElement.getBoundingClientRect();l.x=drag.lx+(e.clientX-drag.x)*(canvas.width/r.width)*1.05;l.y=drag.ly+(e.clientY-drag.y)*(canvas.height/r.height)*1.05;drawArtwork()}
+function artPointerMove(e){if(!drag||mode!=="edit")return;const l=selected();if(!l)return;const r=renderer.domElement.getBoundingClientRect();l.x=drag.lx+(e.clientX-drag.x)*(canvas.width/r.width)*1.05;l.y=drag.ly+(e.clientY-drag.y)*(canvas.height/r.height)*1.05;drawArtwork();syncEditUI()}
 function artPointerUp(){drag=null}
 function resetView(){if(!camera)return;camera.position.set(0,0,5.45);controls?.target.set(0,0,0);controls?.update()}
 function dolly(f){if(!camera)return;camera.position.multiplyScalar(f);controls?.update()}
-function resize(){if(!renderer)return;const r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix()}
+function resize(){if(!renderer||!camera)return;const host=renderer.domElement.parentElement||$("#stage");const r=host.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix()}
 function animate(){if(!renderer)return;controls?.update();renderer.render(scene,camera);raf=requestAnimationFrame(animate)}
 function dispose3D(){cancelAnimationFrame(raf);renderer?.dispose();renderer?.domElement?.remove();renderer=null;scene=null;camera=null;controls=null;caseModel=null;artMesh=null;artTexture=null}
-function updateSummary(){if(!activeDevice)return;$("#caseSummary").textContent=`${activeDevice.phone_model} Case • ${colorName(caseColor)}`;$("#caseChoice").textContent=`${activeDevice.phone_model} Case`}
+function updateSummary(){if(!activeDevice)return;$("#caseSummary").textContent=`${activeDevice.phone_model} Case • ${colorName(caseColor)}`;$("#caseChoice").textContent=`${activeDevice.phone_model} Case`;$("#fsCaseName")?.textContent=`${activeDevice.phone_model} Case`}
+function setSelectedSize(v){const l=selected();if(!l)return;l.scale=Math.max(.2,Math.min(3,v/100));drawArtwork();syncEditUI()}
+function setSelectedRotation(v){const l=selected();if(!l)return;l.rotation=Math.max(-180,Math.min(180,v));drawArtwork();syncEditUI()}
+function syncEditUI(){const l=selected();if(!l){if($("#fsSelectedLabel"))$("#fsSelectedLabel").textContent="No design selected";return}$("#fsSelectedLabel").textContent=l.type==="text"?`Text: ${l.text}`:`Image: ${l.name}`;$("#fsSize").value=Math.round(l.scale*100);$("#fsRotate").value=Math.round(l.rotation);$("#fsSizeValue").textContent=`${Math.round(l.scale*100)}%`;$("#fsRotateValue").textContent=`${Math.round(l.rotation)}°`;$("#sizeRange")?.value=Math.round(l.scale*100);$("#rotateRange")?.value=Math.round(l.rotation)}
+function openFullscreen(){if(!renderer)return;fsOpen=true;$("#fullscreenEditor").classList.add("open");$("#fullscreenEditor").setAttribute("aria-hidden","false");$("#fsStage").appendChild(renderer.domElement);renderer.domElement.style.width="100%";renderer.domElement.style.height="100%";setBackView(true);syncEditUI();setTimeout(resize,30)}
+function closeFullscreen(){if(!fsOpen)return;fsOpen=false;$("#fullscreenEditor").classList.remove("open");$("#fullscreenEditor").setAttribute("aria-hidden","true");$("#stage").appendChild(renderer.domElement);renderer.domElement.style.width="100%";renderer.domElement.style.height="100%";setMode("orbit");resetView();setTimeout(resize,30)}
+function setBackView(full=false){if(!camera||!controls)return;controls.enabled=false;camera.position.set(0,0,-5.35);controls.target.set(0,0,0);controls.update();mode="edit";$("#orbitTool")?.classList.remove("active");$("#editTool")?.classList.add("active");$("#editFloating")?.classList.add("show");$("#hint").textContent="Back view • drag your design to position it";if(full)syncEditUI()}
+function keyHandler(e){if(fsOpen&&e.key==="Escape"){closeFullscreen();return}if(!selected()||(!fsOpen&&mode!=="edit"))return;const l=selected();if(e.key==="Delete"||e.key==="Backspace"){e.preventDefault();deleteSelected();return}if(e.key.startsWith("Arrow")){e.preventDefault();const step=e.shiftKey?30:10;if(e.key==="ArrowLeft")l.x-=step;if(e.key==="ArrowRight")l.x+=step;if(e.key==="ArrowUp")l.y-=step;if(e.key==="ArrowDown")l.y+=step;drawArtwork();syncEditUI();return}if(e.key==="+"||e.key==="="){setSelectedSize(l.scale*100+10);return}if(e.key==="-"||e.key==="_"){setSelectedSize(l.scale*100-10);return}if(e.key==="]"){setSelectedRotation(l.rotation+5);return}if(e.key==="["){setSelectedRotation(l.rotation-5);return}if(e.key.toLowerCase()==="r"){centerSelected();return}}
+window.addEventListener("keydown",keyHandler);
 function saveCustomCase(){if(!activeDevice)return;const preview=canvas?.toDataURL("image/jpeg",.78)||"";const safe=layers.map(l=>({type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",x:l.x,y:l.y,scale:l.scale,rotation:l.rotation}));localStorage.setItem("hadi_custom_case_draft",JSON.stringify({kind:"custom_case",phone_model:activeDevice.phone_model,case_color:caseColor,preview,layers:safe,created_at:new Date().toISOString()}));toast("Custom case saved")}
 addEventListener("resize",resize);initUI();await loadDevices();await loadCase();updateSummary();renderLayers();
