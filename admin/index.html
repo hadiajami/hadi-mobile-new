@@ -21,7 +21,7 @@
     <button class="tab" data-tab="homepage">Homepage</button>
     <button class="tab" data-tab="categories">Categories</button>
     <button class="tab" data-tab="brands">Brands</button>
-    <button class="tab" data-tab="setup">Setup Studio</button>
+    <button class="tab" data-tab="setup">Case Studio</button>
     <button class="tab" data-tab="requests">Requests</button>
   </div>
 
@@ -67,7 +67,7 @@
 
 
   <section id="setupTab" class="tab-panel hidden">
-    <div class="panel-head"><div><h2>Setup Studio</h2><p>Control the real product renders used in Build My Setup.</p></div></div>
+    <div class="panel-head"><div><h2>Case Studio</h2><p>Control the real product renders used in Build My Setup.</p></div></div>
 
     <div class="admin-subsection">
       <div class="admin-subsection-head"><div><strong>Phone renders</strong><small>Add the central phone image for each model. Use a transparent PNG/WebP aligned vertically.</small></div><button class="gold-btn" id="newSetupDevice">+ Add phone</button></div>
@@ -177,7 +177,7 @@
 
 <div class="admin-modal" id="setupDeviceEditor">
   <form class="editor-card" id="setupDeviceForm">
-    <div class="editor-head"><div><span class="eyebrow">SETUP STUDIO</span><h2 id="setupDeviceEditorTitle">Add phone render</h2></div><button type="button" class="xbtn" data-close="setupDeviceEditor">×</button></div>
+    <div class="editor-head"><div><span class="eyebrow">CASE STUDIO</span><h2 id="setupDeviceEditorTitle">Add phone render</h2></div><button type="button" class="xbtn" data-close="setupDeviceEditor">×</button></div>
     <input type="hidden" id="setupDeviceId">
     <label>Phone model<input id="setupDeviceModel" placeholder="e.g. iPhone 17 Pro Max" required><small>This must match the phone-model wording used on compatible products.</small></label>
     <label>Central phone image<input id="setupDeviceImage" type="file" accept="image/png,image/webp,image/jpeg"><small>Use PNG/WebP now. This is the fallback whenever no complete 3D setup is available.</small></label>
@@ -190,7 +190,7 @@
 
 <div class="admin-modal" id="setupRenderEditor">
   <form class="editor-card" id="setupRenderForm">
-    <div class="editor-head"><div><span class="eyebrow">SETUP STUDIO</span><h2 id="setupRenderEditorTitle">Add accessory render</h2></div><button type="button" class="xbtn" data-close="setupRenderEditor">×</button></div>
+    <div class="editor-head"><div><span class="eyebrow">CASE STUDIO</span><h2 id="setupRenderEditorTitle">Add accessory render</h2></div><button type="button" class="xbtn" data-close="setupRenderEditor">×</button></div>
     <input type="hidden" id="setupRenderId">
     <div class="two"><label>Product<select id="setupRenderProduct" required></select></label><label>Phone<select id="setupRenderDevice" required></select></label></div>
     <div class="two"><label>Accessory type<select id="setupRenderSlot"><option value="case">Case</option><option value="screen">Screen protector</option><option value="camera">Camera protector</option><option value="charger">Charging</option><option value="other">Other</option></select></label><label>Layer depth<input id="setupRenderZ" type="number" value="10"></label></div>
