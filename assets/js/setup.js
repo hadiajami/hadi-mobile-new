@@ -2,230 +2,173 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-const CFG=window.HADI_CONFIG;
-const sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
 const $=s=>document.querySelector(s);
-const esc=(s="")=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-const money=n=>`$${Number(n||0).toFixed(2)}`;
-let devices=[],renders=[],products=[],phoneOptions=[],images=[];
-let activeDevice=null,activeSlot="case";
-const selected={};
-const slotLabels={case:"Cases",screen:"Screen",camera:"Camera",charger:"Charging",other:"More"};
-let three=null,renderToken=0;
-let caseColor="#f1f1ef";
-let designImage=null, designTexture=null, designCanvas=null, designCtx=null, designMesh=null;
-let designState={zoom:100,rotate:0,x:0,y:0};
+const CFG=window.HADI_CONFIG||{};
+const sb=window.supabase?.createClient?.(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+const MASTER="assets/models/iphone_17_pro_case_master.glb";
+const COLORS=[
+["White","#f1f1ef"],["Black","#17181b"],["Navy","#233b64"],["Sage","#9daa91"],["Pink","#d9a9b4"],
+["Red","#b72f35"],["Orange","#d86f35"],["Yellow","#e4c85a"],["Sky","#8ebbd8"],["Purple","#796a9e"],
+["Brown","#795b48"],["Sand","#c7b79c"],["Gray","#7b8088"],["Mint","#9fc7b5"]
+];
+const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Times New Roman","Courier New","Verdana","Trebuchet MS"];
+let devices=[], activeDevice=null, caseColor="#f1f1ef";
+let renderer,scene,camera,controls,root,caseModel,artMesh,artTexture,canvas,ctx;
+let layers=[],selectedId=null,mode="orbit",drag=null,modelScale=1;
+const loader=new GLTFLoader();
 
-function mainImage(p){const rows=images.filter(i=>String(i.product_id)===String(p.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));return rows.find(i=>i.is_primary)?.image_url||rows[0]?.image_url||p.image_url||"assets/img/hadi-mobile-logo.jpg";}
-function compatible(p,model){if(!p.has_phone_options)return true;return phoneOptions.some(o=>String(o.product_id)===String(p.id)&&o.phone_model===model&&o.in_stock);}
-function available(p){return p.is_active!==false&&(p.availability_status||"standard")==="standard"&&p.in_stock!==false;}
-function selectedValues(){return Object.values(selected);}
-function canUseFull3D(){return !!(activeDevice?.base_model_url && selectedValues().every(x=>x.render.model_url));}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function selected(){return layers.find(x=>x.id===selectedId)||null}
+function uid(){return (crypto.randomUUID?.()||("l"+Date.now()+Math.random())).replaceAll("-","")}
+function colorName(hex){return COLORS.find(x=>x[1].toLowerCase()===hex.toLowerCase())?.[0]||hex.toUpperCase()}
 
-async function load(){
-  // Load Setup Studio devices FIRST and independently. The phone dropdown
-  // must come directly from Admin → Setup Studio, not from product compatibility.
-  const deviceRes = await sb.from("setup_devices").select("*");
-  if(deviceRes.error){
-    console.error("Setup devices load failed:", deviceRes.error);
-    devices=[];
-    renderDeviceSelect(deviceRes.error.message||"Could not load configured phones");
-    renderAll();
-    return;
-  }
-
-  devices=(deviceRes.data||[])
-    .filter(d=>d.is_active!==false)
-    .sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
-
-  // Render the selector immediately so configured phones are visible even if
-  // an unrelated products/accessories query has a problem.
-  renderDeviceSelect();
-
-  const [r,p,o,i]=await Promise.all([
-    sb.from("setup_product_renders").select("*"),
-    sb.from("products").select("*").eq("is_active",true),
-    sb.from("product_phone_options").select("*"),
-    sb.from("product_images").select("*").order("sort_order")
-  ]);
-  [r,p,o,i].forEach(x=>{if(x.error)console.error(x.error);});
-  renders=(r.data||[]).filter(x=>x.is_active!==false);
-  products=p.data||[];phoneOptions=o.data||[];images=i.data||[];
-
-  const preferred=localStorage.getItem("hadi_preferred_phone")||"";
-  const start=devices.find(x=>x.phone_model===preferred)||devices[0];
-  if(start){
-    $("#deviceSelect").value=String(start.id);
-    chooseDevice(start.id);
-  }else{
-    renderAll();
-  }
-}
-function renderDeviceSelect(errorMessage=""){
-  const select=$("#deviceSelect");
-  if(!select)return;
-  if(errorMessage){
-    select.innerHTML=`<option value="">${esc(errorMessage)}</option>`;
-    select.disabled=true;
-    return;
-  }
-  select.disabled=false;
-  select.innerHTML='<option value="">'+(devices.length?'Choose your phone':'No Setup Studio phones found')+'</option>'+devices.map(d=>`<option value="${d.id}">${esc(d.phone_model)}</option>`).join("");
-  select.onchange=e=>chooseDevice(e.target.value);
-}
-function chooseDevice(id){activeDevice=devices.find(d=>String(d.id)===String(id))||null;Object.keys(selected).forEach(k=>delete selected[k]);if(activeDevice)localStorage.setItem("hadi_preferred_phone",activeDevice.phone_model);renderAll();}
-function deviceRenders(){return activeDevice?renders.filter(r=>String(r.device_id)===String(activeDevice.id)):[];}
-function slots(){return [...new Set(deviceRenders().map(r=>r.slot))].filter(Boolean);}
-function renderAll(){renderStage();renderTabs();renderAccessories();renderSelected();}
-
-function disposeThree(){
-  if(!three)return;
-  cancelAnimationFrame(three.raf||0);
-  three.controls?.dispose();three.renderer?.dispose();
-  three=null;
-}
-function renderStage(){
-  const stage=$("#phoneStage"); if(!stage)return;
-  disposeThree();
-  if(!activeDevice){stage.innerHTML='<div class="empty" id="stageEmpty">Choose a configured phone to start.</div>';setModeBadge("");return;}
-  if(canUseFull3D()) render3DStage(stage); else render2DStage(stage);
-}
-function setModeBadge(mode){const b=$("#visualModeBadge");if(!b)return;b.textContent=mode;b.style.display=mode?"inline-flex":"none";}
-function render2DStage(stage){
-  $("#stageWrap")?.classList.remove("is-3d");
-  const base=activeDevice.base_image_url?`<img class="visual-layer base-phone" src="${activeDevice.base_image_url}" alt="${esc(activeDevice.phone_model)}">`:`<div class="empty">Upload a phone image fallback in Admin for 2D preview.</div>`;
-  const layers=[base];
-  selectedValues().forEach(sel=>{const r=sel.render;if(!r.image_url)return;layers.push(`<img class="visual-layer accessory-layer" src="${r.image_url}" alt="${esc(sel.product.name)}" style="left:${Number(r.pos_x)||50}%;top:${Number(r.pos_y)||50}%;z-index:${Number(r.z_index)||10};transform:translate(-50%,-50%) scale(${(Number(r.scale)||100)/100}) translateZ(${Math.max(1,Number(r.z_index)||10)}px)">`);});
-  stage.innerHTML=layers.join("");setModeBadge("REAL PRODUCT PREVIEW");
-}
-async function render3DStage(stage){
-  $("#stageWrap")?.classList.add("is-3d");
-  const token=++renderToken;stage.innerHTML='<div class="three-loading">Loading real 3D…</div>';setModeBadge("TRUE 3D · DRAG TO ROTATE");
-  const scene=new THREE.Scene();scene.background=null;
-  const camera=new THREE.PerspectiveCamera(32,1,.01,100);camera.position.set(0,.15,5);
-  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:false});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;stage.innerHTML="";stage.appendChild(renderer.domElement);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x9bb1d1,2.2));const key=new THREE.DirectionalLight(0xffffff,3.0);key.position.set(4,6,5);scene.add(key);const fill=new THREE.DirectionalLight(0xbfd9ff,1.8);fill.position.set(-4,2,3);scene.add(fill);
-  const root=new THREE.Group();scene.add(root);const loader=new GLTFLoader();
-  const loadModel=url=>new Promise((resolve,reject)=>loader.load(url,g=>resolve(g.scene),undefined,reject));
+async function loadDevices(){
   try{
-    const bundled17=/iphone\s*17\s*pro/i.test(activeDevice.phone_model||"")?"assets/models/iphone_17_pro_case_master.glb":"";
-    const modelUrl=bundled17||activeDevice.base_model_url;
-    const phone=await loadModel(modelUrl);if(token!==renderToken)return;
-    applyCaseColor(phone);
-    if(bundled17) attachDesignSurface(phone);
-    normalizePhone(phone);root.add(phone);
-    for(const sel of selectedValues()){
-      const r=sel.render;const obj=await loadModel(r.model_url);if(token!==renderToken)return;
-      obj.position.set(Number(r.model_pos_x)||0,Number(r.model_pos_y)||0,Number(r.model_pos_z)||0);obj.scale.setScalar(Number(r.model_scale)||1);obj.rotation.set(THREE.MathUtils.degToRad(Number(r.model_rot_x)||0),THREE.MathUtils.degToRad(Number(r.model_rot_y)||0),THREE.MathUtils.degToRad(Number(r.model_rot_z)||0));root.add(obj);
-    }
-  }catch(err){console.error("3D load failed, falling back to image preview",err);if(token===renderToken)render2DStage(stage);return;}
-  const controls=new OrbitControls(camera,renderer.domElement);
-  // Product-viewer style rotation: smooth, direct, and mobile friendly.
-  controls.enableDamping=true;
-  controls.dampingFactor=0.055;
-  controls.rotateSpeed=0.78;
-  controls.enablePan=false;
-  controls.enableZoom=true;
-  controls.zoomSpeed=0.7;
-  controls.minDistance=2.6;
-  controls.maxDistance=8;
-  controls.target.set(0,0,0);
-  controls.screenSpacePanning=false;
-  controls.touches.ONE=THREE.TOUCH.ROTATE;
-  controls.touches.TWO=THREE.TOUCH.DOLLY_ROTATE;
-  renderer.domElement.style.touchAction="none";
-  renderer.domElement.style.pointerEvents="auto";
-  renderer.domElement.style.cursor="grab";
-  renderer.domElement.addEventListener("pointerdown",()=>{renderer.domElement.style.cursor="grabbing";});
-  renderer.domElement.addEventListener("pointerup",()=>{renderer.domElement.style.cursor="grab";});
-  renderer.domElement.addEventListener("pointercancel",()=>{renderer.domElement.style.cursor="grab";});
-  const resize=()=>{const r=stage.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix();};resize();
-  let raf=0;
-  const animate=()=>{
-    controls.update();
-    renderer.render(scene,camera);
-    raf=requestAnimationFrame(animate);
-  };
-  animate();
-  three={renderer,controls,raf,resize,root};
+    if(sb){const {data,error}=await sb.from("setup_devices").select("*").eq("is_active",true).order("sort_order");if(!error&&data?.length)devices=data}
+  }catch(e){console.warn(e)}
+  if(!devices.length)devices=[{id:"iphone17pro",phone_model:"iPhone 17 Pro",base_model_url:MASTER}];
+  const sel=$("#deviceSelect");
+  sel.innerHTML=devices.map(d=>`<option value="${esc(d.id)}">${esc(d.phone_model)}</option>`).join("");
+  const q=new URLSearchParams(location.search).get("phone");
+  activeDevice=devices.find(d=>d.phone_model===q)||devices.find(d=>/iphone\\s*17\\s*pro/i.test(d.phone_model))||devices[0];
+  sel.value=activeDevice.id;
+  sel.onchange=()=>{activeDevice=devices.find(d=>String(d.id)===sel.value)||devices[0];loadCase();updateSummary()};
 }
-function normalizePhone(obj){const box=new THREE.Box3().setFromObject(obj);const size=box.getSize(new THREE.Vector3());const center=box.getCenter(new THREE.Vector3());obj.position.sub(center);const max=Math.max(size.x,size.y,size.z)||1;obj.scale.setScalar(3.2/max);}
 
+function initUI(){
+  $("#swatches").innerHTML=COLORS.map(([n,c],i)=>`<button class="swatch ${i===0?"active":""}" data-color="${c}" style="background:${c}" title="${n}"></button>`).join("")+`<label class="swatch custom-swatch" style="background:conic-gradient(red,#ff0,lime,cyan,blue,#f0f,red)" title="Custom color"><input id="customColor" type="color" value="${caseColor}"></label>`;
+  $("#fontSelect").innerHTML=FONTS.map(f=>`<option value="${esc(f)}" style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("");
+  document.querySelectorAll("[data-color]").forEach(b=>b.onclick=()=>setCaseColor(b.dataset.color,b));
+  $("#customColor").oninput=e=>setCaseColor(e.target.value,null);
+  $("#viewerColor").oninput=e=>setCaseColor(e.target.value,null);
+  document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".pane").forEach(x=>x.classList.toggle("active",x.id===b.dataset.pane))});
+  $("#imageUpload").addEventListener("change",handleImageUpload);
+  $("#addText").onclick=addText;
+  $("#textInput").addEventListener("keydown",e=>{if(e.key==="Enter")addText()});
+  $("#sizeRange").oninput=e=>{const l=selected();if(l){l.scale=+e.target.value/100;drawArtwork();renderLayers()}};
+  $("#rotateRange").oninput=e=>{const l=selected();if(l){l.rotation=+e.target.value;drawArtwork()}};
+  document.querySelectorAll("[data-nudge]").forEach(b=>b.onclick=()=>{const l=selected();if(!l)return;const [dx,dy]=b.dataset.nudge.split(",").map(Number);l.x+=dx;l.y+=dy;drawArtwork()});
+  $("#centerLayer").onclick=()=>{const l=selected();if(l){l.x=canvas.width/2;l.y=canvas.height/2;drawArtwork()}};
+  $("#deleteLayer").onclick=deleteSelected;
+  $("#duplicateLayer").onclick=duplicateSelected;
+  $("#orbitTool").onclick=()=>setMode("orbit");
+  $("#editTool").onclick=()=>setMode("edit");
+  $("#fitView").onclick=resetView;
+  $("#zoomIn").onclick=()=>dolly(.82);
+  $("#zoomOut").onclick=()=>dolly(1.2);
+  $("#addCart").onclick=saveCustomCase;
+}
 
-function applyCaseColor(obj){
-  const c=new THREE.Color(caseColor);
-  obj.traverse(ch=>{
-    if(!ch.isMesh||ch===designMesh)return;
-    const n=(ch.name||"").toLowerCase();
-    if(n.includes("camera control"))return;
-    if(Array.isArray(ch.material)) ch.material=ch.material.map(m=>{const x=m.clone();if(x.color)x.color.copy(c);x.roughness=.72;x.metalness=.02;return x;});
-    else if(ch.material){const x=ch.material.clone();if(x.color)x.color.copy(c);x.roughness=.72;x.metalness=.02;ch.material=x;}
+function setCaseColor(c,button){
+  caseColor=c;$("#viewerColor").value=c;$("#customColor").value=c;
+  document.querySelectorAll(".swatch[data-color]").forEach(x=>x.classList.toggle("active",x===button));
+  applyCaseColor();updateSummary()
+}
+function applyCaseColor(){
+  if(!caseModel)return;const c=new THREE.Color(caseColor);
+  caseModel.traverse(ch=>{if(!ch.isMesh||ch===artMesh)return;const n=(ch.name||"").toLowerCase();if(n.includes("camera control"))return;
+    const mats=Array.isArray(ch.material)?ch.material:[ch.material];
+    ch.material=mats.map(m=>{const x=m.clone();if(x.color)x.color.copy(c);x.roughness=.78;x.metalness=.01;return x});
+    if(ch.material.length===1)ch.material=ch.material[0];
   });
 }
-function attachDesignSurface(phone){
-  designCanvas=document.createElement("canvas");designCanvas.width=1000;designCanvas.height=1500;designCtx=designCanvas.getContext("2d");
-  designTexture=new THREE.CanvasTexture(designCanvas);designTexture.colorSpace=THREE.SRGBColorSpace;designTexture.anisotropy=4;
-  const mat=new THREE.MeshBasicMaterial({map:designTexture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,side:THREE.DoubleSide});
-  const geo=new THREE.PlaneGeometry(69.0,103.0,1,1);
-  designMesh=new THREE.Mesh(geo,mat);designMesh.name="HADI_CUSTOM_ARTWORK";
-  // Back printable zone ends below the iPhone 17 Pro camera plateau.
-  designMesh.position.set(0,-21.8,6.355);
-  designMesh.renderOrder=10;phone.add(designMesh);drawDesign();
-}
-function drawDesign(){
-  if(!designCtx||!designCanvas||!designTexture)return;
-  const w=designCanvas.width,h=designCanvas.height;designCtx.clearRect(0,0,w,h);
-  if(!designImage){designTexture.needsUpdate=true;return;}
-  designCtx.save();designCtx.translate(w/2+(designState.x/100)*(w*.34),h/2+(designState.y/100)*(h*.34));designCtx.rotate(designState.rotate*Math.PI/180);
-  const base=Math.max(w/designImage.width,h/designImage.height);const scale=base*(designState.zoom/100);
-  const iw=designImage.width*scale,ih=designImage.height*scale;designCtx.drawImage(designImage,-iw/2,-ih/2,iw,ih);designCtx.restore();designTexture.needsUpdate=true;
-}
-function refreshCaseColor(){
-  if(!three?.root)return;
-  applyCaseColor(three.root);
-}
-function initCustomizer(){
-  document.querySelectorAll("[data-case-color]").forEach(b=>b.onclick=()=>{caseColor=b.dataset.caseColor;document.querySelectorAll("[data-case-color]").forEach(x=>x.classList.toggle("active",x===b));refreshCaseColor();});
-  const up=$("#designUpload");if(up)up.onchange=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{designImage=img;designState={zoom:100,rotate:0,x:0,y:0};syncDesignControls();drawDesign();};img.src=r.result;};r.readAsDataURL(f);};
-  [["designZoom","zoom"],["designRotate","rotate"],["designX","x"],["designY","y"]].forEach(([id,k])=>{const el=$("#"+id);if(el)el.oninput=()=>{designState[k]=Number(el.value);drawDesign();};});
-  $("#resetDesign")?.addEventListener("click",()=>{designState={zoom:100,rotate:0,x:0,y:0};syncDesignControls();drawDesign();});
-  $("#removeDesign")?.addEventListener("click",()=>{designImage=null;if(up)up.value="";drawDesign();});
-}
-function syncDesignControls(){[["designZoom","zoom"],["designRotate","rotate"],["designX","x"],["designY","y"]].forEach(([id,k])=>{const el=$("#"+id);if(el)el.value=designState[k];});}
 
-function renderTabs(){const s=slots();if(s.length&&!s.includes(activeSlot))activeSlot=s[0];$("#slotTabs").innerHTML=s.map(x=>`<button class="slot-tab ${x===activeSlot?"active":""}" data-slot="${x}">${slotLabels[x]||x}</button>`).join("");$("#slotTabs").querySelectorAll("[data-slot]").forEach(b=>b.onclick=()=>{activeSlot=b.dataset.slot;renderTabs();renderAccessories();});}
-function renderAccessories(){
-  const box=$("#accessoryList");if(!activeDevice){box.innerHTML='<div class="empty">Select your phone first.</div>';return;}
-  const rows=deviceRenders().filter(r=>r.slot===activeSlot).map(r=>({render:r,product:products.find(p=>String(p.id)===String(r.product_id))})).filter(x=>x.product&&available(x.product)&&compatible(x.product,activeDevice.phone_model));
-  if(!rows.length){box.innerHTML=`<div class="empty">No ${esc((slotLabels[activeSlot]||activeSlot).toLowerCase())} visuals are configured for this phone yet.</div>`;return;}
-  box.innerHTML=rows.map(({render,product})=>{const chosen=selected[activeSlot]?.product.id===product.id;const tag=render.model_url?'3D + IMAGE':'REAL IMAGE';return `<article class="accessory-card ${chosen?"selected":""}"><img src="${mainImage(product)}" alt="${esc(product.name)}"><div class="acc-main"><strong>${esc(product.name)}</strong><span>${money(product.price)}</span><small>${chosen?"Shown on your phone":tag}</small></div><button class="choose-acc ${chosen?"remove":""}" data-render="${render.id}">${chosen?"Remove":"Try it"}</button></article>`;}).join("");
-  box.querySelectorAll("[data-render]").forEach(b=>b.onclick=()=>{const r=renders.find(x=>String(x.id)===String(b.dataset.render));if(!r)return;const p=products.find(x=>String(x.id)===String(r.product_id));if(!p)return;if(selected[activeSlot]?.product.id===p.id)delete selected[activeSlot];else selected[activeSlot]={render:r,product:p};renderAll();});
+async function loadCase(){
+  $("#stage").innerHTML="";dispose3D();
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(32,1,.01,100);
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;
+  $("#stage").appendChild(renderer.domElement);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x8fa0b8,2.5));
+  const key=new THREE.DirectionalLight(0xffffff,3.1);key.position.set(4,6,8);scene.add(key);
+  const fill=new THREE.DirectionalLight(0xb8d7ff,1.6);fill.position.set(-5,-1,5);scene.add(fill);
+  root=new THREE.Group();scene.add(root);
+  const url=/iphone\\s*17\\s*pro/i.test(activeDevice?.phone_model||"")?MASTER:(activeDevice?.base_model_url||MASTER);
+  try{
+    const gltf=await loader.loadAsync(url);caseModel=gltf.scene;
+    const box0=new THREE.Box3().setFromObject(caseModel),size0=box0.getSize(new THREE.Vector3()),center0=box0.getCenter(new THREE.Vector3());
+    caseModel.position.sub(center0);modelScale=3.45/Math.max(size0.x,size0.y,size0.z);caseModel.scale.setScalar(modelScale);root.add(caseModel);
+    applyCaseColor();createArtworkSurface(size0);
+  }catch(e){console.error(e);toast("3D model could not load");return}
+  controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.055;controls.enablePan=false;controls.enableZoom=true;controls.rotateSpeed=.75;controls.zoomSpeed=.7;controls.minDistance=3;controls.maxDistance=8;controls.touches.ONE=THREE.TOUCH.ROTATE;controls.touches.TWO=THREE.TOUCH.DOLLY_ROTATE;
+  resetView();resize();animate();setMode(mode);
+  renderer.domElement.addEventListener("pointerdown",artPointerDown);
+  renderer.domElement.addEventListener("pointermove",artPointerMove);
+  renderer.domElement.addEventListener("pointerup",artPointerUp);
+  renderer.domElement.addEventListener("pointercancel",artPointerUp);
 }
-function renderSelected(){const vals=selectedValues(),box=$("#selectedStack");box.innerHTML='<h3>Selected accessories</h3>'+(vals.length?vals.map(x=>`<div class="selected-row"><span>${esc(slotLabels[x.render.slot]||x.render.slot)} · ${esc(x.product.name)}</span><strong>${money(x.product.price)}</strong></div>`).join(""):'<div class="empty">Your setup is empty.</div>');const total=vals.reduce((s,x)=>s+Number(x.product.price||0),0);$("#setupCount").textContent=`${vals.length} ${vals.length===1?"accessory":"accessories"}`;$("#setupTotal").textContent=money(total);$("#addSetupBtn").disabled=!vals.length;}
-function addToCart(){const vals=selectedValues();if(!vals.length)return;let cart=JSON.parse(localStorage.getItem("hadi_cart")||"[]")||[];vals.forEach(({product})=>{const phoneModel=product.has_phone_options?activeDevice.phone_model:"";const key=`${product.id}${phoneModel?`::${phoneModel}`:""}`;const existing=cart.find(x=>x.key===key);if(existing)existing.qty=(existing.qty||1)+1;else cart.push({key,id:product.id,name:product.name,phone_model:phoneModel,color_name:"",price:Number(product.price),image_url:mainImage(product),qty:1});});localStorage.setItem("hadi_cart",JSON.stringify(cart));const t=$("#toast");t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);}
-$("#addSetupBtn").onclick=addToCart;
+function createArtworkSurface(rawSize){
+  canvas=document.createElement("canvas");canvas.width=900;canvas.height=1350;ctx=canvas.getContext("2d");
+  artTexture=new THREE.CanvasTexture(canvas);artTexture.colorSpace=THREE.SRGBColorSpace;artTexture.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  // Master GLB is X=width, Y=height, Z=depth. The printable back is the broad lower area under the camera plateau.
+  const geo=new THREE.PlaneGeometry(69,101);
+  const mat=new THREE.MeshBasicMaterial({map:artTexture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,side:THREE.DoubleSide});
+  artMesh=new THREE.Mesh(geo,mat);artMesh.name="HADI_CUSTOM_PRINT_SURFACE";
+  artMesh.position.set(0,-23.0,6.39);artMesh.renderOrder=20;caseModel.add(artMesh);drawArtwork();
+}
+function drawArtwork(){
+  if(!ctx)return;ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(const l of layers){
+    ctx.save();ctx.translate(l.x,l.y);ctx.rotate(l.rotation*Math.PI/180);ctx.globalAlpha=l.opacity??1;
+    if(l.type==="image"&&l.image){
+      const base=Math.min(620/l.image.width,900/l.image.height);const w=l.image.width*base*l.scale,h=l.image.height*base*l.scale;ctx.drawImage(l.image,-w/2,-h/2,w,h)
+    }else if(l.type==="text"){
+      const size=110*l.scale;ctx.fillStyle=l.color;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`700 ${size}px "${l.font}"`;ctx.fillText(l.text,0,0,800)
+    }
+    ctx.restore()
+  }
+  artTexture.needsUpdate=true
+}
+async function handleImageUpload(e){
+  const f=e.target.files?.[0];if(!f)return;
+  if(!/^image\\/(jpeg|png|webp)$/.test(f.type)){toast("Please choose JPG, PNG or WEBP");return}
+  try{
+    let img;
+    if("createImageBitmap" in window){img=await createImageBitmap(f)}
+    else{img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=URL.createObjectURL(f)})}
+    const l={id:uid(),type:"image",name:f.name,image:img,x:canvas.width/2,y:canvas.height/2,scale:1,rotation:0,opacity:1};
+    layers.push(l);selectLayer(l.id);drawArtwork();setMode("edit");e.target.value="";toast("Image added — drag it on the case")
+  }catch(err){console.error(err);toast("Could not read that image")}
+}
+function addText(){
+  const text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}
+  const l={id:uid(),type:"text",name:text,text,font:$("#fontSelect").value,color:$("#textColor").value,x:canvas.width/2,y:canvas.height/2,scale:1,rotation:0,opacity:1};
+  layers.push(l);$("#textInput").value="";selectLayer(l.id);drawArtwork();setMode("edit");toast("Text added — drag it on the case")
+}
+function selectLayer(id){
+  selectedId=id;const l=selected();$("#editCard").classList.toggle("show",!!l);
+  if(l){$("#editTitle").textContent=l.type==="text"?`Edit “${l.text.slice(0,22)}”`:"Edit image";$("#sizeRange").value=Math.round(l.scale*100);$("#rotateRange").value=l.rotation}
+  renderLayers()
+}
+function renderLayers(){
+  $("#layerCount").textContent=`${layers.length} ${layers.length===1?"ITEM":"ITEMS"}`;
+  $("#layers").innerHTML=layers.length?layers.slice().reverse().map(l=>`<div class="layer ${l.id===selectedId?"active":""}"><span>${l.type==="text"?"T":"▧"} &nbsp;${esc(l.type==="text"?l.text:l.name)}</span><button data-layer="${l.id}">Edit</button></div>`).join(""):`<p style="font-size:.58rem;color:#7b8aa2;margin:0">Upload an image or add text to start.</p>`;
+  document.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{selectLayer(b.dataset.layer);setMode("edit")})
+}
+function deleteSelected(){if(!selectedId)return;layers=layers.filter(x=>x.id!==selectedId);selectedId=layers.at(-1)?.id||null;drawArtwork();selectLayer(selectedId)}
+function duplicateSelected(){const l=selected();if(!l)return;const c={...l,id:uid(),x:l.x+35,y:l.y+35};layers.push(c);selectLayer(c.id);drawArtwork()}
+function setMode(m){mode=m;$("#orbitTool").classList.toggle("active",m==="orbit");$("#editTool").classList.toggle("active",m==="edit");if(controls)controls.enabled=m==="orbit";$("#hint").textContent=m==="orbit"?"Drag the case to rotate • pinch to zoom":"Drag selected artwork directly on the case"}
+function artPointerDown(e){if(mode!=="edit"||!selected())return;drag={x:e.clientX,y:e.clientY,lx:selected().x,ly:selected().y};renderer.domElement.setPointerCapture?.(e.pointerId)}
+function artPointerMove(e){if(!drag||mode!=="edit")return;const l=selected();if(!l)return;const r=renderer.domElement.getBoundingClientRect();l.x=drag.lx+(e.clientX-drag.x)*(canvas.width/r.width)*1.15;l.y=drag.ly+(e.clientY-drag.y)*(canvas.height/r.height)*1.15;drawArtwork()}
+function artPointerUp(){drag=null}
+function resetView(){if(!camera)return;camera.position.set(0,-.05,5.2);if(controls){controls.target.set(0,0,0);controls.update()}}
+function dolly(f){if(!camera)return;camera.position.multiplyScalar(f);if(controls)controls.update()}
+function resize(){if(!renderer)return;const r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix()}
+function animate(){if(!renderer)return;controls?.update();renderer.render(scene,camera);requestAnimationFrame(animate)}
+function dispose3D(){if(renderer){renderer.dispose();renderer.domElement?.remove()}renderer=scene=camera=controls=root=caseModel=artMesh=artTexture=null}
+function updateSummary(){if(!activeDevice)return;$("#caseSummary").textContent=`${activeDevice.phone_model} • ${colorName(caseColor)}`}
+function saveCustomCase(){
+  if(!activeDevice)return;
+  // Store a compact preview plus exact editable layer transforms. This is enough for cart/order handoff;
+  // production upload/storage can be wired to Supabase Storage next.
+  const preview=canvas?.toDataURL("image/jpeg",.72)||"";
+  const safeLayers=layers.map(l=>({type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",x:l.x,y:l.y,scale:l.scale,rotation:l.rotation}));
+  const custom={kind:"custom_case",phone_model:activeDevice.phone_model,case_color:caseColor,preview,layers:safeLayers,created_at:new Date().toISOString()};
+  localStorage.setItem("hadi_custom_case_draft",JSON.stringify(custom));
+  toast("Custom case saved");
+}
 
-const wrap=$("#stageWrap"),stage=$("#phoneStage");
-function tilt(clientX,clientY){
-  // 2D fallback only. Never interfere with the real 3D canvas / OrbitControls.
-  if(canUseFull3D())return;
-  const r=wrap.getBoundingClientRect();
-  const x=(clientX-r.left)/r.width-.5,y=(clientY-r.top)/r.height-.5;
-  stage.style.transform=`rotateX(${-y*8}deg) rotateY(${x*10}deg) scale(1.015)`;
-}
-wrap.addEventListener("pointermove",e=>{
-  if(canUseFull3D())return;
-  if(e.pointerType==="mouse"||e.buttons)tilt(e.clientX,e.clientY);
-});
-wrap.addEventListener("pointerdown",e=>{
-  // IMPORTANT: do not capture the pointer in 3D mode. Pointer capture on the
-  // wrapper steals pointermove events from OrbitControls after the initial drag.
-  if(canUseFull3D())return;
-  wrap.setPointerCapture?.(e.pointerId);
-  tilt(e.clientX,e.clientY);
-});
-wrap.addEventListener("pointerup",()=>{if(!canUseFull3D())stage.style.transform="";});
-wrap.addEventListener("pointerleave",()=>{if(!canUseFull3D())stage.style.transform="";});
-addEventListener("resize",()=>three?.resize?.());
-initCustomizer();
-load();
+addEventListener("resize",resize);
+initUI();await loadDevices();await loadCase();updateSummary();renderLayers();
