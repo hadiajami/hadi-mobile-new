@@ -40,7 +40,10 @@ function buildUI(){
   $("#fsRotate").oninput=e=>changeRotation(+e.target.value);
   document.querySelectorAll("[data-move]").forEach(b=>b.onclick=()=>{let [x,y]=b.dataset.move.split(",").map(Number);moveSelected(x,y)});
   $("#centerBtn").onclick=centerSelected; $("#fsCenter").onclick=centerSelected;
-  $("#deleteBtn").onclick=deleteSelected; $("#fsDelete").onclick=deleteSelected;
+  $("#deleteBtn").onclick=deleteSelected; if($("#fsDelete"))$("#fsDelete").onclick=deleteSelected;
+  $("#confirmPlacement").onclick=confirmPlacement; $("#fsConfirm").onclick=()=>{confirmPlacement();closeFull()};
+  $("#removeBgBtn").onclick=removeBackground; $("#fsRemoveBg").onclick=removeBackground;
+  $("#fsFit").onclick=fitFullCase;
   $("#fsZoomIn").onclick=()=>zoomFull(.86); $("#fsZoomOut").onclick=()=>zoomFull(1.16);
 }
 
@@ -57,16 +60,16 @@ function recolor(root){
 }
 
 function createArtwork(){
-  artCanvas=document.createElement("canvas");artCanvas.width=900;artCanvas.height=1350;artCtx=artCanvas.getContext("2d");
+  artCanvas=document.createElement("canvas");artCanvas.width=900;artCanvas.height=1860;artCtx=artCanvas.getContext("2d");
   artTexture=new THREE.CanvasTexture(artCanvas);artTexture.colorSpace=THREE.SRGBColorSpace;artTexture.anisotropy=8;
   redraw();
 }
 function makeArtPlane(texture){
-  const g=new THREE.PlaneGeometry(66,100);
+  const g=new THREE.PlaneGeometry(69.2,143.5);
   const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4});
   const p=new THREE.Mesh(g,m);
   // Exact master GLB: rear face is negative Z. Keep print below camera plateau.
-  p.position.set(0,-22,7.58);p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
+  p.position.set(0,-2.0,7.58);p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
   return p;
 }
 async function loadMain(){
@@ -82,7 +85,7 @@ function lights(s){s.add(new THREE.HemisphereLight(0xffffff,0x93a6c0,2.5));let a
 function normalize(o){const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());o.position.sub(c);o.scale.setScalar(3.45/Math.max(sz.x,sz.y,sz.z))}
 function resizeMain(){if(!renderer)return;let r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
 function mainLoop(){controls?.update();renderer?.render(scene,camera);raf=requestAnimationFrame(mainLoop)}
-function zoomMain(f){if(!camera)return;const dir=Math.sign(camera.position.z)||1;const z=Math.min(6.4,Math.max(3.75,Math.abs(camera.position.z)*f));camera.position.z=dir*z;controls?.update()}
+function zoomMain(f){if(!camera)return;const dir=Math.sign(camera.position.z)||1;const z=Math.min(8.2,Math.max(3.55,Math.abs(camera.position.z)*f));camera.position.z=dir*z;controls?.update()}
 function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,-.1,5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId&&mode!=="edit")setMode("edit")}
 
 async function openFull(){
@@ -96,20 +99,65 @@ async function openFull(){
   // Replace cloned artwork material with same live texture.
   fsCase.traverse(o=>{if(o.name==="CUSTOM_PRINT_SURFACE"){fsArt=o;o.material=o.material.clone();o.material.map=artTexture;o.material.needsUpdate=true}});
   fsScene.add(fsCase);recolor(fsCase);
-  fsCamera.position.set(0,-.1,4.65);
+  fsCamera.position.set(0,-.1,6.2);
   fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.enableRotate=false;fsControls.enablePan=false;fsControls.enableZoom=false;fsControls.target.set(0,-.28,0);fsControls.update();
   resizeFull();fullLoop();attachDrag(fsRenderer.domElement,true);syncEditor();
 }
 function closeFull(){cancelAnimationFrame(fsRaf);fsControls?.dispose();fsRenderer?.dispose();fsScene=fsCamera=fsRenderer=fsControls=fsCase=fsArt=null;$("#fullEditor").classList.remove("open");document.body.style.overflow=""}
 function resizeFull(){if(!fsRenderer)return;let r=$("#fsStage").getBoundingClientRect();fsRenderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);fsCamera.aspect=r.width/r.height;fsCamera.updateProjectionMatrix()}
 function fullLoop(){fsRenderer?.render(fsScene,fsCamera);fsRaf=requestAnimationFrame(fullLoop)}
-function zoomFull(f){if(!fsCamera)return;fsCamera.position.z=Math.min(5.9,Math.max(3.55,Math.abs(fsCamera.position.z)*f));fsCamera.position.x=0;fsCamera.position.y=-.1;fsCamera.lookAt(0,-.28,0)}
+function zoomFull(f){if(!fsCamera)return;fsCamera.position.z=Math.min(8.4,Math.max(3.55,Math.abs(fsCamera.position.z)*f));fsCamera.position.x=0;fsCamera.position.y=-.1;fsCamera.lookAt(0,-.28,0)}
+function fitFullCase(){if(!fsCamera)return;fsCamera.position.set(0,-.1,6.7);fsCamera.lookAt(0,-.28,0)}
+function confirmPlacement(){if(!selected())return;setMode("rotate");toast("Placement confirmed — rotate the case freely")}
+
+
+async function removeBackground(){
+  const l=selected();
+  if(!l||l.type!=="image"){toast("Select a photo first");return}
+  toast("Removing background…");
+  try{
+    const mod=await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm");
+    const c=document.createElement("canvas");c.width=l.image.width;c.height=l.image.height;
+    c.getContext("2d").drawImage(l.image,0,0);
+    const blob=await new Promise(r=>c.toBlob(r,"image/png"));
+    const result=await mod.removeBackground(blob,{output:{format:"image/png"}});
+    const bmp=await createImageBitmap(result);
+    try{l.image.close?.()}catch(e){}
+    l.image=bmp;l.name=l.name.replace(/\.[^.]+$/,"")+" — no background";
+    redraw();renderLayers();toast("Background removed");
+  }catch(err){
+    console.error("Background removal failed",err);
+    toast("Background removal could not run on this device");
+  }
+}
 
 function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit"&&camera&&controls){camera.position.set(0,-.1,5.0);controls.target.set(0,-.25,0);controls.update()}}
 function attachDrag(el,full){
-  el.addEventListener("pointerdown",e=>{if((!full&&mode!=="edit")||!selected())return;drag={sx:e.clientX,sy:e.clientY,x:selected().x,y:selected().y,full};el.setPointerCapture?.(e.pointerId)});
-  el.addEventListener("pointermove",e=>{if(!drag||drag.full!==full)return;let r=el.getBoundingClientRect(),l=selected();if(!l)return;l.x=Math.max(80,Math.min(820,drag.x+(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05));l.y=Math.max(100,Math.min(1250,drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05));redraw()});
-  const end=()=>drag=null;el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+  let touches=new Map(), pinchStart=null;
+  el.addEventListener("pointerdown",e=>{
+    if((!full&&mode!=="edit")||!selected())return;
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    el.setPointerCapture?.(e.pointerId);
+    if(touches.size===1){drag={sx:e.clientX,sy:e.clientY,x:selected().x,y:selected().y,full}}
+    if(touches.size===2){
+      const a=[...touches.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+      pinchStart={distance:d,scale:selected().scale};drag=null;
+    }
+  },{passive:false});
+  el.addEventListener("pointermove",e=>{
+    if(!touches.has(e.pointerId))return;
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(touches.size>=2&&pinchStart){
+      e.preventDefault();const a=[...touches.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+      changeScale(Math.max(.1,Math.min(4,pinchStart.scale*(d/pinchStart.distance))));return;
+    }
+    if(!drag||drag.full!==full)return;
+    e.preventDefault();let r=el.getBoundingClientRect(),l=selected();if(!l)return;
+    l.x=Math.max(45,Math.min(855,drag.x+(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05));
+    l.y=Math.max(70,Math.min(1790,drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05));redraw();
+  },{passive:false});
+  const end=e=>{touches.delete(e.pointerId);if(touches.size<2)pinchStart=null;if(touches.size===0)drag=null};
+  el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
 }
 
 async function uploadPhoto(e){
@@ -117,7 +165,7 @@ async function uploadPhoto(e){
   if(f.size>10*1024*1024){toast("Image must be under 10 MB");return}
   try{
     let im=await createImageBitmap(f);
-    let l={id:id(),type:"image",name:f.name,image:im,x:450,y:675,scale:1,rotation:0};layers.push(l);selectLayer(l.id);redraw();setMode("edit");backView();toast("Photo added to the back");
+    let l={id:id(),type:"image",name:f.name,image:im,x:450,y:1080,scale:1,rotation:0};layers.push(l);selectLayer(l.id);redraw();setMode("edit");backView();toast("Photo added to the back");
   }catch(err){console.error(err);toast("Could not open this image")}
   e.target.value="";
 }
@@ -125,7 +173,7 @@ async function addText(){
   let text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}
   const font=$("#fontSelect").value;
   try{await document.fonts.load(`700 105px "${font}"`);await document.fonts.ready}catch(e){}
-  let l={id:id(),type:"text",name:text,text,font,color:$("#textColor").value,x:450,y:675,scale:1,rotation:0};
+  let l={id:id(),type:"text",name:text,text,font,color:$("#textColor").value,x:450,y:1080,scale:1,rotation:0};
   layers.push(l);$("#textInput").value="";$("#textForm").classList.remove("open");selectLayer(l.id);redraw();setMode("edit");toast("Text added — drag it directly on the back")
 }
 function redraw(){
@@ -134,6 +182,17 @@ function redraw(){
     if(l.type==="image"){let fit=Math.min(650/l.image.width,900/l.image.height),w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;artCtx.drawImage(l.image,-w/2,-h/2,w,h)}
     else{let size=145*l.scale;artCtx.font=`700 ${size}px "${l.font}"`;artCtx.textAlign="center";artCtx.textBaseline="middle";artCtx.fillStyle=l.color;artCtx.fillText(l.text,0,0,820)}
     artCtx.restore()}
+  // Keep the camera opening completely print-free. This mask is applied after
+  // every layer, so photos/text can cover the whole back but never the camera.
+  artCtx.save();
+  artCtx.globalCompositeOperation="destination-out";
+  const mx=88,my=55,mw=724,mh=570,rad=92;
+  artCtx.beginPath();
+  artCtx.moveTo(mx+rad,my);artCtx.lineTo(mx+mw-rad,my);artCtx.quadraticCurveTo(mx+mw,my,mx+mw,my+rad);
+  artCtx.lineTo(mx+mw,my+mh-rad);artCtx.quadraticCurveTo(mx+mw,my+mh,mx+mw-rad,my+mh);
+  artCtx.lineTo(mx+rad,my+mh);artCtx.quadraticCurveTo(mx,my+mh,mx,my+mh-rad);
+  artCtx.lineTo(mx,my+rad);artCtx.quadraticCurveTo(mx,my,mx+rad,my);artCtx.closePath();artCtx.fill();
+  artCtx.restore();
   artTexture.needsUpdate=true;
 }
 function selectLayer(i){selectedId=i;renderLayers();syncEditor()}
@@ -147,8 +206,8 @@ function syncEditor(){
 }
 function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);$("#fsSize").value=Math.round(v*100);redraw()}
 function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;$("#fsRotate").value=v;redraw()}
-function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(80,Math.min(820,l.x+dx));l.y=Math.max(100,Math.min(1250,l.y+dy));redraw()}
-function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=675;redraw()}
+function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(45,Math.min(855,l.x+dx));l.y=Math.max(70,Math.min(1790,l.y+dy));redraw()}
+function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=1080;redraw()}
 function deleteSelected(){if(!selectedId)return;layers=layers.filter(l=>l.id!==selectedId);selectedId=layers.at(-1)?.id||null;redraw();renderLayers();syncEditor()}
 
 window.addEventListener("resize",()=>{resizeMain();resizeFull()});
@@ -166,7 +225,7 @@ window.addEventListener("keydown",e=>{
 
 function preventBrowserZoom(){
   const targets=[document.getElementById("stage"),document.getElementById("fsStage")].filter(Boolean);
-  for(const el of targets){
+  for(const el of targets){el.style.touchAction="none";
     ["gesturestart","gesturechange","gestureend"].forEach(type=>el.addEventListener(type,e=>e.preventDefault(),{passive:false}));
     let lastTouchEnd=0;
     el.addEventListener("touchend",e=>{const now=Date.now();if(now-lastTouchEnd<=320)e.preventDefault();lastTouchEnd=now},{passive:false});
