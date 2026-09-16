@@ -41,10 +41,10 @@ function buildUI(){
   document.querySelectorAll("[data-move]").forEach(b=>b.onclick=()=>{let [x,y]=b.dataset.move.split(",").map(Number);moveSelected(x,y)});
   $("#centerBtn").onclick=centerSelected; $("#fsCenter").onclick=centerSelected;
   $("#deleteBtn").onclick=deleteSelected; if($("#fsDelete"))$("#fsDelete").onclick=deleteSelected;
-  $("#confirmPlacement").onclick=confirmPlacement; $("#fsConfirm").onclick=()=>{confirmPlacement();closeFull()};
-  $("#removeBgBtn").onclick=removeBackground; $("#fsRemoveBg").onclick=removeBackground;
-  $("#fsFit").onclick=fitFullCase;
-  $("#fsZoomIn").onclick=()=>zoomFull(.86); $("#fsZoomOut").onclick=()=>zoomFull(1.16);
+  if($("#confirmPlacement"))$("#confirmPlacement").onclick=confirmPlacement; if($("#fsConfirm"))$("#fsConfirm").onclick=()=>{confirmPlacement();closeFull()};
+  if($("#removeBgBtn"))$("#removeBgBtn").onclick=removeBackground; if($("#fsRemoveBg"))$("#fsRemoveBg").onclick=removeBackground;
+  if($("#fsFit"))$("#fsFit").onclick=fitFullCase;
+  if($("#fsZoomIn"))$("#fsZoomIn").onclick=()=>zoomFull(.86); if($("#fsZoomOut"))$("#fsZoomOut").onclick=()=>zoomFull(1.16);
 }
 
 function setColor(c,btn){
@@ -202,10 +202,10 @@ function renderLayers(){
   box.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{selectLayer(b.dataset.layer);setMode("edit")});
 }
 function syncEditor(){
-  let l=selected();$("#editor").classList.toggle("show",!!l);if(!l)return;$("#editorTitle").textContent=l.type==="text"?"Edit text":"Edit photo";$("#sizeRange").value=Math.round(l.scale*100);$("#rotationRange").value=l.rotation;$("#fsSize").value=Math.round(l.scale*100);$("#fsRotate").value=l.rotation;
+  let l=selected();$("#editor").classList.toggle("show",!!l);if(!l)return;$("#editorTitle").textContent=l.type==="text"?"Edit text":"Edit photo";$("#sizeRange").value=Math.round(l.scale*100);$("#rotationRange").value=l.rotation;if($("#fsSize"))$("#fsSize").value=Math.round(l.scale*100);if($("#fsRotate"))$("#fsRotate").value=l.rotation;
 }
-function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);$("#fsSize").value=Math.round(v*100);redraw()}
-function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;$("#fsRotate").value=v;redraw()}
+function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);if($("#fsSize"))$("#fsSize").value=Math.round(v*100);redraw()}
+function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;if($("#fsRotate"))$("#fsRotate").value=v;redraw()}
 function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(45,Math.min(855,l.x+dx));l.y=Math.max(70,Math.min(1790,l.y+dy));redraw()}
 function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=1080;redraw()}
 function deleteSelected(){if(!selectedId)return;layers=layers.filter(l=>l.id!==selectedId);selectedId=layers.at(-1)?.id||null;redraw();renderLayers();syncEditor()}
@@ -232,4 +232,7 @@ function preventBrowserZoom(){
   }
 }
 
-buildUI();createArtwork();renderLayers();loadMain();preventBrowserZoom();
+createArtwork();
+renderLayers();
+loadMain().catch(err=>{console.error("Case load failed:",err);const s=document.getElementById("stage");if(s)s.innerHTML='<div class="loading">Could not load 3D case. Please refresh once.</div>'});
+try{buildUI();preventBrowserZoom()}catch(err){console.error("Case Studio UI init error:",err)}
