@@ -91,7 +91,7 @@ async function openFull(){
   // Replace cloned artwork material with same live texture.
   fsCase.traverse(o=>{if(o.name==="CUSTOM_PRINT_SURFACE"){fsArt=o;o.material=o.material.clone();o.material.map=artTexture;o.material.needsUpdate=true}});
   fsScene.add(fsCase);recolor(fsCase);
-  fsCamera.position.set(0,-.1,-6.2);
+  fsCamera.position.set(0,-.1,-7.0);
   fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.enableRotate=false;fsControls.enablePan=false;fsControls.enableZoom=false;fsControls.target.set(0,-.28,0);fsControls.update();
   resizeFull();fullLoop();attachDrag(fsRenderer.domElement,true);syncEditor();
 }
@@ -145,8 +145,8 @@ function attachDrag(el,full){
     }
     if(!drag||drag.full!==full)return;
     e.preventDefault();let r=el.getBoundingClientRect(),l=selected();if(!l)return;
-    l.x=Math.max(45,Math.min(855,drag.x+(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05));
-    l.y=Math.max(70,Math.min(1790,drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05));redraw();
+    l.x=Math.max(55,Math.min(845,drag.x+(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05));
+    l.y=Math.max(600,Math.min(1780,drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05));redraw();
   },{passive:false});
   const end=e=>{touches.delete(e.pointerId);if(touches.size<2)pinchStart=null;if(touches.size===0)drag=null};
   el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
@@ -157,7 +157,7 @@ async function uploadPhoto(e){
   if(f.size>10*1024*1024){toast("Image must be under 10 MB");return}
   try{
     let im=await createImageBitmap(f);
-    let l={id:id(),type:"image",name:f.name,image:im,x:450,y:1080,scale:1,rotation:0};layers.push(l);selectLayer(l.id);redraw();setMode("edit");backView();toast("Photo added to the back");
+    let l={id:id(),type:"image",name:f.name,image:im,x:450,y:1160,scale:1,rotation:0};layers.push(l);selectLayer(l.id);redraw();setMode("edit");backView();toast("Photo added to the back");
   }catch(err){console.error(err);toast("Could not open this image")}
   e.target.value="";
 }
@@ -165,7 +165,7 @@ async function addText(){
   let text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}
   const font=$("#fontSelect").value;
   try{await document.fonts.load(`700 105px "${font}"`);await document.fonts.ready}catch(e){}
-  let l={id:id(),type:"text",name:text,text,font,color:$("#textColor").value,x:450,y:1080,scale:1,rotation:0};
+  let l={id:id(),type:"text",name:text,text,font,color:$("#textColor").value,x:450,y:1160,scale:1,rotation:0};
   layers.push(l);$("#textInput").value="";$("#textForm").classList.remove("open");selectLayer(l.id);redraw();setMode("edit");toast("Text added — drag it directly on the back")
 }
 function redraw(){
@@ -174,16 +174,28 @@ function redraw(){
     if(l.type==="image"){let fit=Math.min(650/l.image.width,900/l.image.height),w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;artCtx.drawImage(l.image,-w/2,-h/2,w,h)}
     else{let size=145*l.scale;artCtx.font=`700 ${size}px "${l.font}"`;artCtx.textAlign="center";artCtx.textBaseline="middle";artCtx.fillStyle=l.color;artCtx.fillText(l.text,0,0,820)}
     artCtx.restore()}
-  // Keep the camera opening completely print-free. This mask is applied after
-  // every layer, so photos/text can cover the whole back but never the camera.
+  // Clip artwork to the REAL exterior printable back.
+  // 1) Nothing may exist outside the case silhouette.
+  artCtx.save();
+  artCtx.globalCompositeOperation="destination-in";
+  const ox=36,oy=22,ow=828,oh=1816,or=105;
+  artCtx.beginPath();
+  artCtx.moveTo(ox+or,oy);artCtx.lineTo(ox+ow-or,oy);artCtx.quadraticCurveTo(ox+ow,oy,ox+ow,oy+or);
+  artCtx.lineTo(ox+ow,oy+oh-or);artCtx.quadraticCurveTo(ox+ow,oy+oh,ox+ow-or,oy+oh);
+  artCtx.lineTo(ox+or,oy+oh);artCtx.quadraticCurveTo(ox,oy+oh,ox,oy+oh-or);
+  artCtx.lineTo(ox,oy+or);artCtx.quadraticCurveTo(ox,oy,ox+or,oy);artCtx.closePath();artCtx.fill();
+  artCtx.restore();
+
+  // 2) The complete raised camera zone is NON-printable, not only its hole.
+  // This prevents artwork appearing on/above the camera frame when moved/rotated.
   artCtx.save();
   artCtx.globalCompositeOperation="destination-out";
-  const mx=88,my=55,mw=724,mh=570,rad=92;
+  const cx=38,cy=18,cw=824,ch=570,cr=108;
   artCtx.beginPath();
-  artCtx.moveTo(mx+rad,my);artCtx.lineTo(mx+mw-rad,my);artCtx.quadraticCurveTo(mx+mw,my,mx+mw,my+rad);
-  artCtx.lineTo(mx+mw,my+mh-rad);artCtx.quadraticCurveTo(mx+mw,my+mh,mx+mw-rad,my+mh);
-  artCtx.lineTo(mx+rad,my+mh);artCtx.quadraticCurveTo(mx,my+mh,mx,my+mh-rad);
-  artCtx.lineTo(mx,my+rad);artCtx.quadraticCurveTo(mx,my,mx+rad,my);artCtx.closePath();artCtx.fill();
+  artCtx.moveTo(cx+cr,cy);artCtx.lineTo(cx+cw-cr,cy);artCtx.quadraticCurveTo(cx+cw,cy,cx+cw,cy+cr);
+  artCtx.lineTo(cx+cw,cy+ch-cr);artCtx.quadraticCurveTo(cx+cw,cy+ch,cx+cw-cr,cy+ch);
+  artCtx.lineTo(cx+cr,cy+ch);artCtx.quadraticCurveTo(cx,cy+ch,cx,cy+ch-cr);
+  artCtx.lineTo(cx,cy+cr);artCtx.quadraticCurveTo(cx,cy,cx+cr,cy);artCtx.closePath();artCtx.fill();
   artCtx.restore();
   artTexture.needsUpdate=true;
 }
@@ -198,8 +210,8 @@ function syncEditor(){
 }
 function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);if($("#fsSize"))$("#fsSize").value=Math.round(v*100);redraw()}
 function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;if($("#fsRotate"))$("#fsRotate").value=v;redraw()}
-function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(45,Math.min(855,l.x+dx));l.y=Math.max(70,Math.min(1790,l.y+dy));redraw()}
-function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=1080;redraw()}
+function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(55,Math.min(845,l.x+dx));l.y=Math.max(600,Math.min(1780,l.y+dy));redraw()}
+function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=1160;redraw()}
 function deleteSelected(){if(!selectedId)return;layers=layers.filter(l=>l.id!==selectedId);selectedId=layers.at(-1)?.id||null;redraw();renderLayers();syncEditor()}
 
 window.addEventListener("resize",()=>{resizeMain();resizeFull()});
