@@ -58,7 +58,7 @@ function createArtwork(){
 }
 function makeArtPlane(texture){
   const g=new THREE.PlaneGeometry(69.2,143.5);
-  const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4});
+  const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1});
   const p=new THREE.Mesh(g,m);
   // Exact master GLB: rear face is negative Z. Keep print below camera plateau.
   p.position.set(0,-2.0,-7.60);p.rotation.y=Math.PI;p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
@@ -80,51 +80,47 @@ function mainLoop(){controls?.update();renderer?.render(scene,camera);raf=reques
 function zoomMain(f){if(!camera)return;const dir=Math.sign(camera.position.z)||1;const z=Math.min(8.2,Math.max(3.55,Math.abs(camera.position.z)*f));camera.position.z=dir*z;controls?.update()}
 function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,-.1,-5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId&&mode!=="edit")setMode("edit")}
 
-async function openFull(){
+function openFull(){
   if(!selectedId && !layers.length){toast("Add a photo or text first");return}
   if(!selectedId && layers.length)selectLayer(layers[layers.length-1].id);
   $("#fullEditor").classList.add("open");document.body.style.overflow="hidden";
-  fsScene=new THREE.Scene();fsCamera=new THREE.PerspectiveCamera(29,1,.01,1000);fsRenderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-  fsRenderer.setPixelRatio(Math.min(devicePixelRatio,2));fsRenderer.outputColorSpace=THREE.SRGBColorSpace;fsRenderer.toneMapping=THREE.ACESFilmicToneMapping;fsRenderer.toneMappingExposure=1.08;
-  $("#fsStage").innerHTML="";$("#fsStage").appendChild(fsRenderer.domElement);lights(fsScene);
-  fsCase=caseRoot.clone(true); // cloned current model + artwork plane
-  // Replace cloned artwork material with same live texture.
-  fsCase.traverse(o=>{if(o.name==="CUSTOM_PRINT_SURFACE"){fsArt=o;o.material=o.material.clone();o.material.map=artTexture;o.material.needsUpdate=true}});
-  fsScene.add(fsCase);recolor(fsCase);
-  fsCamera.position.set(0,-.1,-7.0);
-  fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.enableRotate=false;fsControls.enablePan=false;fsControls.enableZoom=false;fsControls.target.set(0,-.28,0);fsControls.update();
-  resizeFull();fullLoop();attachDrag(fsRenderer.domElement,true);syncEditor();
+  $("#fsStage").appendChild(renderer.domElement);
+  mode="edit";controls.enabled=false;
+  camera.position.set(0,-.1,-7.15);controls.target.set(0,-.28,0);camera.lookAt(controls.target);
+  resizeFull();attachDrag(renderer.domElement,true);syncEditor();
 }
-function closeFull(){cancelAnimationFrame(fsRaf);fsControls?.dispose();fsRenderer?.dispose();fsScene=fsCamera=fsRenderer=fsControls=fsCase=fsArt=null;$("#fullEditor").classList.remove("open");document.body.style.overflow=""}
-function resizeFull(){if(!fsRenderer)return;let r=$("#fsStage").getBoundingClientRect();fsRenderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);fsCamera.aspect=r.width/r.height;fsCamera.updateProjectionMatrix()}
-function fullLoop(){fsRenderer?.render(fsScene,fsCamera);fsRaf=requestAnimationFrame(fullLoop)}
-function zoomFull(f){if(!fsCamera)return;const z=Math.min(8.4,Math.max(3.55,Math.abs(fsCamera.position.z)*f));fsCamera.position.set(0,-.1,-z);fsCamera.lookAt(0,-.28,0)}
-function fitFullCase(){if(!fsCamera)return;fsCamera.position.set(0,-.1,-7.0);fsCamera.lookAt(0,-.28,0)}
-function confirmPlacement(){if(!selected())return;mode="rotate";if(controls)controls.enabled=true;$("#rotateMode")?.classList.add("on");$("#editMode")?.classList.remove("on");$("#viewerNote").textContent="Placement confirmed • Drag to rotate • Pinch to zoom";toast("Placement confirmed — rotate the case freely")}
-
-
+function closeFull(){
+  if(!renderer)return;
+  $("#stage").appendChild(renderer.domElement);
+  $("#fullEditor").classList.remove("open");document.body.style.overflow="";
+  mode="rotate";controls.enabled=true;
+  camera.position.set(0,-.1,-6.25);controls.target.set(0,-.25,0);camera.lookAt(controls.target);controls.update();
+  resizeMain();$("#rotateMode")?.classList.add("on");$("#editMode")?.classList.remove("on");
+  $("#viewerNote").textContent="Drag to rotate • Pinch to zoom";
+}
+function resizeFull(){if(!renderer)return;const r=$("#fsStage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
+function fullLoop(){}
+function zoomFull(f){if(!camera)return;const z=Math.min(9.2,Math.max(4,Math.abs(camera.position.z)*f));camera.position.set(0,-.1,-z);camera.lookAt(0,-.28,0)}
+function fitFullCase(){if(!camera)return;camera.position.set(0,-.1,-7.35);camera.lookAt(0,-.28,0)}
+function confirmPlacement(){
+  if(!selected())return;
+  if($("#fullEditor").classList.contains("open")) closeFull();
+  else {mode="rotate";controls.enabled=true;$("#rotateMode")?.classList.add("on");$("#editMode")?.classList.remove("on");$("#viewerNote").textContent="Placement saved • Drag to rotate • Pinch to zoom";}
+  toast("Placement saved");
+}
 async function removeBackground(){
-  const l=selected();
-  if(!l||l.type!=="image"){toast("Select a photo first");return}
+  const l=selected();if(!l||l.type!=="image"){toast("Select a photo first");return}
   toast("Removing background…");
   try{
     const mod=await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm");
-    const c=document.createElement("canvas");c.width=l.image.width;c.height=l.image.height;
-    c.getContext("2d").drawImage(l.image,0,0);
-    const blob=await new Promise(r=>c.toBlob(r,"image/png"));
-    const result=await mod.removeBackground(blob,{output:{format:"image/png"}});
-    const bmp=await createImageBitmap(result);
-    try{l.image.close?.()}catch(e){}
-    l.image=bmp;l.name=l.name.replace(/\.[^.]+$/,"")+" — no background";
-    redraw();renderLayers();toast("Background removed");
-  }catch(err){
-    console.error("Background removal failed",err);
-    toast("Background removal could not run on this device");
-  }
+    const c=document.createElement("canvas");c.width=l.image.width;c.height=l.image.height;c.getContext("2d").drawImage(l.image,0,0);
+    const blob=await new Promise(r=>c.toBlob(r,"image/png"));const result=await mod.removeBackground(blob,{output:{format:"image/png"}});const bmp=await createImageBitmap(result);
+    try{l.image.close?.()}catch(e){} l.image=bmp;l.name=l.name.replace(/\.[^.]+$/,"")+" — no background";redraw();renderLayers();toast("Background removed");
+  }catch(err){console.error(err);toast("Background removal could not run on this device")}
 }
-
 function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit"&&camera&&controls){camera.position.set(0,-.1,-6.5);controls.target.set(0,-.25,0);controls.update()}}
 function attachDrag(el,full){
+  const k=full?"fsBound":"mainBound"; if(el.dataset[k])return; el.dataset[k]="1";
   let touches=new Map(), pinchStart=null;
   el.addEventListener("pointerdown",e=>{
     if((!full&&mode!=="edit")||!selected())return;
@@ -190,7 +186,7 @@ function redraw(){
   // This prevents artwork appearing on/above the camera frame when moved/rotated.
   artCtx.save();
   artCtx.globalCompositeOperation="destination-out";
-  const cx=38,cy=18,cw=824,ch=570,cr=108;
+  const cx=46,cy=18,cw=808,ch=548,cr=104;
   artCtx.beginPath();
   artCtx.moveTo(cx+cr,cy);artCtx.lineTo(cx+cw-cr,cy);artCtx.quadraticCurveTo(cx+cw,cy,cx+cw,cy+cr);
   artCtx.lineTo(cx+cw,cy+ch-cr);artCtx.quadraticCurveTo(cx+cw,cy+ch,cx+cw-cr,cy+ch);
@@ -234,7 +230,7 @@ function installReliableControls(){
     rotateMode:()=>setMode("rotate"), editMode:()=>setMode("edit"),
     zoomIn:()=>zoomMain(.84), zoomOut:()=>zoomMain(1.18),
     closeFull:()=>closeFull(), fsZoomIn:()=>zoomFull(.86), fsZoomOut:()=>zoomFull(1.16),
-    fsFit:()=>fitFullCase(), fsCenter:()=>centerSelected(), fsConfirm:()=>{confirmPlacement();closeFull()},
+    fsFit:()=>fitFullCase(), fsCenter:()=>centerSelected(), fsConfirm:()=>confirmPlacement(),
     confirmPlacement:()=>confirmPlacement(), centerBtn:()=>centerSelected(),
     deleteBtn:()=>deleteSelected(), removeBgBtn:()=>removeBackground(), fsRemoveBg:()=>removeBackground()
   };
