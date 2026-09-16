@@ -3,114 +3,161 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const $=s=>document.querySelector(s);
-const CFG=window.HADI_CONFIG||{};
-const sb=window.supabase?.createClient?.(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
-const MASTER="assets/models/iphone_17_pro_case_master.glb";
-const COLORS=[
- ["Black","#17181b"],["White","#f1f1ef"],["Graphite","#45474d"],["Silver","#c9ccd1"],["Navy","#233b64"],["Royal Blue","#356ed1"],["Sky","#8ebbd8"],["Sage","#9daa91"],["Mint","#9fc7b5"],["Forest","#315a4b"],["Pink","#d9a9b4"],["Red","#b72f35"],["Orange","#d86f35"],["Yellow","#e4c85a"],["Purple","#796a9e"],["Lavender","#b7add7"],["Brown","#795b48"],["Sand","#c7b79c"],["Cream","#eee5cf"],["Coral","#e98979"]
-];
-const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Times New Roman","Courier New","Verdana","Trebuchet MS"];
-let devices=[],activeDevice=null,caseColor="#17181b";
-let renderer,scene,camera,controls,caseModel,artMesh,artTexture,canvas,ctx,raf;
-let layers=[],selectedId=null,mode="orbit",drag=null;
-const loader=new GLTFLoader();
+const MODEL="assets/models/iphone_17_pro_case_master.glb";
+const COLORS=[["White","#efefed"],["Black","#17181b"],["Graphite","#4c5158"],["Navy","#263a5f"],["Sky","#8db9d5"],["Blue","#416ea6"],["Pink","#d7a6b3"],["Rose","#b66d7c"],["Purple","#776695"],["Lavender","#b7a9ce"],["Sage","#9eaa91"],["Green","#54725d"],["Mint","#a5c7b5"],["Sand","#c8b89c"],["Brown","#775c49"],["Orange","#d2763d"],["Red","#b53b43"],["Yellow","#ddc75d"]];
+const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Times New Roman","Courier New","Verdana"];
 
-function toast(msg){const t=$("#toast");if(!t)return;t.textContent=msg;t.classList.add("show");clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove("show"),1800)}
-function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-function uid(){return crypto.randomUUID?.()||`l${Date.now()}${Math.random()}`}
-function selected(){return layers.find(l=>l.id===selectedId)||null}
-function colorName(h){return COLORS.find(x=>x[1].toLowerCase()===h.toLowerCase())?.[0]||h.toUpperCase()}
+let scene,camera,renderer,controls,caseRoot,artMesh,artCanvas,artCtx,artTexture,raf;
+let fsScene,fsCamera,fsRenderer,fsControls,fsCase,fsArt,fsRaf;
+let caseColor="#efefed", layers=[], selectedId=null, mode="rotate", drag=null;
 
-async function loadDevices(){
- try{
-  if(sb){const {data,error}=await sb.from("setup_devices").select("id,phone_model,base_model_url,is_active,sort_order").eq("is_active",true).order("sort_order");if(!error&&data?.length)devices=data;}
- }catch(e){console.warn("case models",e)}
- if(!devices.length)devices=[{id:"iphone17pro",phone_model:"iPhone 17 Pro",base_model_url:MASTER,is_active:true}];
- const sel=$("#deviceSelect");
- sel.innerHTML=devices.map(d=>`<option value="${esc(d.id)}">${esc(d.phone_model)} — Custom Silicone Case</option>`).join("");
- activeDevice=devices.find(d=>/iphone\s*17\s*pro/i.test(d.phone_model))||devices[0];
- sel.value=activeDevice.id;
- sel.onchange=async()=>{activeDevice=devices.find(d=>String(d.id)===sel.value)||devices[0];$("#caseChoice").textContent=`${activeDevice.phone_model} Case`;layers=[];selectedId=null;renderLayers();await loadCase();updateSummary()};
+function toast(s){const t=$("#toast");t.textContent=s;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1500)}
+function selected(){return layers.find(x=>x.id===selectedId)}
+function id(){return "l"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+
+function buildUI(){
+  $("#swatches").innerHTML=COLORS.map(([n,c],i)=>`<button class="swatch ${i===0?"on":""}" style="background:${c}" data-color="${c}" title="${n}"></button>`).join("")+`<label class="swatch custom" title="Any color"><input id="customColor" type="color" value="${caseColor}"></label>`;
+  $("#fontSelect").innerHTML=FONTS.map(f=>`<option value="${f}" style="font-family:'${f}'">${f}</option>`).join("");
+  document.querySelectorAll("[data-color]").forEach(b=>b.onclick=()=>setColor(b.dataset.color,b));
+  $("#customColor").oninput=e=>setColor(e.target.value);
+  $("#quickColor").oninput=e=>setColor(e.target.value);
+  $("#photoInput").onchange=uploadPhoto;
+  $("#textToggle").onclick=()=>$("#textForm").classList.toggle("open");
+  $("#addText").onclick=addText;
+  $("#textInput").onkeydown=e=>{if(e.key==="Enter")addText()};
+  $("#rotateMode").onclick=()=>setMode("rotate");
+  $("#editMode").onclick=()=>setMode("edit");
+  $("#backView").onclick=()=>backView(false);
+  $("#zoomIn").onclick=()=>zoomMain(.84);
+  $("#zoomOut").onclick=()=>zoomMain(1.18);
+  $("#openFull").onclick=openFull;
+  $("#fullFromEdit").onclick=openFull;
+  $("#closeFull").onclick=closeFull;
+  $("#sizeRange").oninput=e=>changeScale(+e.target.value/100);
+  $("#rotationRange").oninput=e=>changeRotation(+e.target.value);
+  $("#fsSize").oninput=e=>changeScale(+e.target.value/100);
+  $("#fsRotate").oninput=e=>changeRotation(+e.target.value);
+  document.querySelectorAll("[data-move]").forEach(b=>b.onclick=()=>{let [x,y]=b.dataset.move.split(",").map(Number);moveSelected(x,y)});
+  $("#centerBtn").onclick=centerSelected; $("#fsCenter").onclick=centerSelected;
+  $("#deleteBtn").onclick=deleteSelected; $("#fsDelete").onclick=deleteSelected;
+  $("#fsZoomIn").onclick=()=>zoomFull(.86); $("#fsZoomOut").onclick=()=>zoomFull(1.16);
 }
 
-function initUI(){
- const sw=$("#swatches");
- sw.innerHTML=COLORS.map(([n,c],i)=>`<button class="swatch ${i===1?"active":""}" data-color="${c}" style="background:${c}" title="${n}" aria-label="${n}"></button>`).join("")+`<label class="swatch custom-swatch" title="Custom color"><input id="customColor" type="color" value="${caseColor}" aria-label="Custom case color"></label>`;
- $("#fontSelect").innerHTML=FONTS.map(f=>`<option value="${esc(f)}" style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("");
- document.querySelectorAll(".swatch[data-color]").forEach(b=>b.onclick=()=>setCaseColor(b.dataset.color,b));
- $("#customColor").oninput=e=>setCaseColor(e.target.value,null);$("#viewerColor").oninput=e=>setCaseColor(e.target.value,null);
- document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".pane").forEach(x=>x.classList.toggle("active",x.id===b.dataset.pane))});
- $("#imageUpload").addEventListener("change",handleImageUpload);$("#addText").onclick=addText;$("#textInput").addEventListener("keydown",e=>{if(e.key==="Enter")addText()});
- $("#orbitTool").onclick=()=>setMode("orbit");$("#editTool").onclick=()=>setMode("edit");$("#fitView").onclick=resetView;$("#zoomIn").onclick=()=>dolly(.82);$("#zoomOut").onclick=()=>dolly(1.2);
- $("#backViewBtn").onclick=()=>setBackView(false);$("#fullscreenBtn").onclick=openFullscreen;$("#fsClose").onclick=closeFullscreen;$("#fsBackView").onclick=()=>setBackView(true);$("#fsZoomIn").onclick=()=>dolly(.82);$("#fsZoomOut").onclick=()=>dolly(1.2);
- $("#fsDelete").onclick=deleteSelected;$("#fsCenter").onclick=centerSelected;$("#fsSize").oninput=e=>setSelectedSize(+e.target.value);$("#fsRotate").oninput=e=>setSelectedRotation(+e.target.value);
- document.querySelectorAll("[data-fs-nudge]").forEach(b=>b.onclick=()=>{const l=selected();if(!l)return;const [x,y]=b.dataset.fsNudge.split(",").map(Number);l.x+=x*12;l.y+=y*12;drawArtwork();syncEditUI()});
- $("#addCart").onclick=saveCustomCase;$("#deleteLayer").onclick=deleteSelected;$("#duplicateLayer").onclick=duplicateSelected;$("#centerLayer").onclick=centerSelected;
- ["sizeRange","rotateRange"].forEach(id=>$("#"+id)?.addEventListener("input",e=>{if(e.target.id==="sizeRange")setSelectedSize(+e.target.value);else setSelectedRotation(+e.target.value)}));
- document.querySelectorAll("[data-nudge]").forEach(b=>b.onclick=()=>{const l=selected();if(!l)return;const [dx,dy]=b.dataset.nudge.split(",").map(Number);l.x+=dx;l.y+=dy;drawArtwork();syncEditUI()});
+function setColor(c,btn){
+  caseColor=c; $("#quickColor").value=c; const cc=$("#customColor"); if(cc)cc.value=c;
+  document.querySelectorAll("[data-color]").forEach(x=>x.classList.toggle("on",x===btn));
+  recolor(caseRoot); recolor(fsCase);
 }
-function setCaseColor(c,b){caseColor=c;$("#viewerColor").value=c;$("#customColor").value=c;document.querySelectorAll(".swatch[data-color]").forEach(x=>x.classList.toggle("active",x===b));applyCaseColor();updateSummary()}
-function applyCaseColor(){if(!caseModel)return;const c=new THREE.Color(caseColor);caseModel.traverse(ch=>{if(!ch.isMesh||ch===artMesh)return;const n=(ch.name||"").toLowerCase();if(n.includes("camera control"))return;const old=Array.isArray(ch.material)?ch.material:[ch.material];const mats=old.map(m=>{const x=m.clone();if(x.color)x.color.copy(c);x.roughness=.72;x.metalness=.015;return x});ch.material=mats.length===1?mats[0]:mats})}
+function recolor(root){
+  if(!root)return; const c=new THREE.Color(caseColor);
+  root.traverse(o=>{if(!o.isMesh)return; const n=(o.name||"").toLowerCase(); if(n.includes("camera control"))return;
+    const arr=Array.isArray(o.material)?o.material:[o.material]; const cloned=arr.map(m=>{m=m.clone();if(m.color)m.color.copy(c);m.roughness=.76;m.metalness=.01;return m});o.material=Array.isArray(o.material)?cloned:cloned[0];
+  });
+}
 
-async function loadCase(){
- const stage=$("#stage");stage.innerHTML=`<div class="loader-ui"><div class="spinner"></div><strong>Loading your case…</strong><small>Preparing the 3D preview</small></div>`;
- dispose3D();
- scene=new THREE.Scene();
- camera=new THREE.PerspectiveCamera(30,1,.01,100);
- renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
- renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;stage.appendChild(renderer.domElement);
- scene.add(new THREE.HemisphereLight(0xffffff,0x92a4bd,2.8));
- const key=new THREE.DirectionalLight(0xffffff,3.3);key.position.set(4,5,8);scene.add(key);
- const fill=new THREE.DirectionalLight(0xbad7ff,1.5);fill.position.set(-5,1,5);scene.add(fill);
- const rim=new THREE.DirectionalLight(0xffffff,1.1);rim.position.set(0,-5,-4);scene.add(rim);
- try{
-  const url=/iphone\s*17\s*pro/i.test(activeDevice?.phone_model||"")?MASTER:(activeDevice?.base_model_url||MASTER);
-  const buf=await fetch(`${url}${url.includes("?")?"&":"?"}v=15`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.arrayBuffer()});
-  const gltf=await new Promise((resolve,reject)=>loader.parse(buf,"",resolve,reject));
-  caseModel=gltf.scene;
-  const box=new THREE.Box3().setFromObject(caseModel);const center=box.getCenter(new THREE.Vector3());const size=box.getSize(new THREE.Vector3());
-  caseModel.position.sub(center);const maxDim=Math.max(size.x,size.y,size.z);caseModel.scale.setScalar(3.35/maxDim);scene.add(caseModel);
-  applyCaseColor();createArtworkSurface();
-  stage.querySelector(".loader-ui")?.remove();
- }catch(e){console.error("3D case load failed",e);stage.innerHTML=`<div class="load-error"><strong>3D preview couldn't load.</strong><small>Make sure the case GLB is uploaded at <b>assets/models/iphone_17_pro_case_master.glb</b>.</small><button id="retry3d">Retry</button></div>`;$("#retry3d")?.addEventListener("click",loadCase);return}
- controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.055;controls.enablePan=false;controls.enableZoom=true;controls.rotateSpeed=.7;controls.zoomSpeed=.7;controls.minDistance=3;controls.maxDistance=8;controls.touches.ONE=THREE.TOUCH.ROTATE;controls.touches.TWO=THREE.TOUCH.DOLLY_ROTATE;
- resetView();resize();renderer.domElement.addEventListener("pointerdown",artPointerDown);renderer.domElement.addEventListener("pointermove",artPointerMove);renderer.domElement.addEventListener("pointerup",artPointerUp);renderer.domElement.addEventListener("pointercancel",artPointerUp);
- cancelAnimationFrame(raf);animate();setMode(mode);
+function createArtwork(){
+  artCanvas=document.createElement("canvas");artCanvas.width=900;artCanvas.height=1350;artCtx=artCanvas.getContext("2d");
+  artTexture=new THREE.CanvasTexture(artCanvas);artTexture.colorSpace=THREE.SRGBColorSpace;artTexture.anisotropy=8;
+  redraw();
 }
-function createArtworkSurface(){
- canvas=document.createElement("canvas");canvas.width=1000;canvas.height=1500;ctx=canvas.getContext("2d");
- artTexture=new THREE.CanvasTexture(canvas);artTexture.colorSpace=THREE.SRGBColorSpace;artTexture.anisotropy=renderer.capabilities.getMaxAnisotropy();
- const geo=new THREE.PlaneGeometry(67.5,108);
- const mat=new THREE.MeshBasicMaterial({map:artTexture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-8,side:THREE.DoubleSide});
- artMesh=new THREE.Mesh(geo,mat);artMesh.name="CUSTOM_PRINT_SURFACE";artMesh.position.set(0,-10,-7.62);artMesh.renderOrder=50;caseModel.add(artMesh);drawArtwork();
+function makeArtPlane(texture){
+  const g=new THREE.PlaneGeometry(66,100);
+  const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4});
+  const p=new THREE.Mesh(g,m);
+  // Exact master GLB: rear face is negative Z. Keep print below camera plateau.
+  p.position.set(0,-22,-7.58);p.rotation.y=Math.PI;p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
+  return p;
 }
-function drawArtwork(){if(!ctx)return;ctx.clearRect(0,0,canvas.width,canvas.height);for(const l of layers){ctx.save();ctx.translate(l.x,l.y);ctx.rotate(l.rotation*Math.PI/180);ctx.globalAlpha=l.opacity??1;if(l.type==="image"&&l.image){const fit=Math.min(720/l.image.width,760/l.image.height);const w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;ctx.drawImage(l.image,-w/2,-h/2,w,h)}else if(l.type==="text"){const size=105*l.scale;ctx.fillStyle=l.color;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`700 ${size}px "${l.font}"`;ctx.fillText(l.text,0,0,900)}ctx.restore()}artTexture.needsUpdate=true}
-async function handleImageUpload(e){const f=e.target.files?.[0];if(!f)return;if(f.size>10*1024*1024){toast("Image must be under 10 MB");e.target.value="";return}if(!/^image\/(jpeg|png|webp)$/.test(f.type)){toast("Use JPG, PNG or WEBP");e.target.value="";return}try{const url=URL.createObjectURL(f);const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>{URL.revokeObjectURL(url);res(im)};im.onerror=rej;im.src=url});const l={id:uid(),type:"image",name:f.name,image:img,x:canvas.width/2,y:canvas.height/2,scale:1,rotation:0,opacity:1};layers.push(l);selectLayer(l.id);drawArtwork();setMode("edit");toast("Image added — drag it on the case")}catch(err){console.error(err);toast("Could not read that image")}finally{e.target.value=""}}
-function addText(){const text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}const l={id:uid(),type:"text",name:text,text,font:$("#fontSelect").value,color:$("#textColor").value,x:canvas.width/2,y:canvas.height/2,scale:1,rotation:0,opacity:1};layers.push(l);$("#textInput").value="";selectLayer(l.id);drawArtwork();setMode("edit");toast("Text added")}
-function selectLayer(id){selectedId=id;const l=selected();$("#editCard").classList.toggle("show",!!l);if(l){$("#editTitle").textContent=l.type==="text"?`Edit “${l.text.slice(0,22)}”`:"Edit image";syncEditUI()}renderLayers()}
-function syncEditUI(){const l=selected();if(!l)return;$("#sizeRange").value=Math.round(l.scale*100);$("#rotateRange").value=Math.round(l.rotation);$("#viewerSize").value=Math.round(l.scale*100);$("#viewerRotate").value=Math.round(l.rotation);drawArtwork()}
-function syncEditFromUI(e){const l=selected();if(!l)return;const id=e?.target?.id||"";if(id.includes("Size"))l.scale=+e.target.value/100;else if(id.includes("Rotate"))l.rotation=+e.target.value;$("#sizeRange").value=Math.round(l.scale*100);$("#rotateRange").value=Math.round(l.rotation);$("#viewerSize").value=Math.round(l.scale*100);$("#viewerRotate").value=Math.round(l.rotation);drawArtwork()}
-function renderLayers(){$("#layerCount").textContent=`${layers.length} ${layers.length===1?"ITEM":"ITEMS"}`;$("#layers").innerHTML=layers.length?layers.slice().reverse().map(l=>`<div class="layer ${l.id===selectedId?"active":""}"><span>${l.type==="text"?"T":"▧"} &nbsp;${esc(l.type==="text"?l.text:l.name)}</span><button data-layer="${l.id}">Edit</button></div>`).join(""):`<p style="font-size:.58rem;color:#7b8aa2;margin:0">Your image or text will appear here.</p>`;document.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{selectLayer(b.dataset.layer);setMode("edit")})}
-function deleteSelected(){if(!selectedId)return;layers=layers.filter(x=>x.id!==selectedId);selectedId=layers.at(-1)?.id||null;drawArtwork();selectLayer(selectedId)}
-function duplicateSelected(){const l=selected();if(!l)return;const c={...l,id:uid(),x:l.x+35,y:l.y+35};layers.push(c);selectLayer(c.id);drawArtwork()}
-function centerSelected(){const l=selected();if(!l)return;l.x=canvas.width/2;l.y=canvas.height/2;drawArtwork()}
-function setMode(m){mode=m;$("#orbitTool").classList.toggle("active",m==="orbit");$("#editTool").classList.toggle("active",m==="edit");if(controls)controls.enabled=m==="orbit";$("#editFloating").classList.toggle("show",m==="edit");$("#hint").textContent=m==="orbit"?"Drag to rotate • pinch to zoom":"Drag the selected design directly on the case"}
-function artPointerDown(e){if(mode!=="edit"||!selected())return;drag={x:e.clientX,y:e.clientY,lx:selected().x,ly:selected().y};try{renderer.domElement.setPointerCapture(e.pointerId)}catch{}}
-function artPointerMove(e){if(!drag||mode!=="edit")return;const l=selected();if(!l)return;const r=renderer.domElement.getBoundingClientRect();l.x=drag.lx+(e.clientX-drag.x)*(canvas.width/r.width)*1.05;l.y=drag.ly+(e.clientY-drag.y)*(canvas.height/r.height)*1.05;drawArtwork();syncEditUI()}
-function artPointerUp(){drag=null}
-function resetView(){if(!camera)return;camera.position.set(0,0,5.45);controls?.target.set(0,0,0);controls?.update()}
-function dolly(f){if(!camera)return;camera.position.multiplyScalar(f);controls?.update()}
-function resize(){if(!renderer||!camera)return;const host=renderer.domElement.parentElement||$("#stage");const r=host.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix()}
-function animate(){if(!renderer)return;controls?.update();renderer.render(scene,camera);raf=requestAnimationFrame(animate)}
-function dispose3D(){cancelAnimationFrame(raf);renderer?.dispose();renderer?.domElement?.remove();renderer=null;scene=null;camera=null;controls=null;caseModel=null;artMesh=null;artTexture=null}
-function updateSummary(){if(!activeDevice)return;$("#caseSummary").textContent=`${activeDevice.phone_model} Case • ${colorName(caseColor)}`;$("#caseChoice").textContent=`${activeDevice.phone_model} Case`;$("#fsCaseName")?.textContent=`${activeDevice.phone_model} Case`}
-function setSelectedSize(v){const l=selected();if(!l)return;l.scale=Math.max(.2,Math.min(3,v/100));drawArtwork();syncEditUI()}
-function setSelectedRotation(v){const l=selected();if(!l)return;l.rotation=Math.max(-180,Math.min(180,v));drawArtwork();syncEditUI()}
-function syncEditUI(){const l=selected();if(!l){if($("#fsSelectedLabel"))$("#fsSelectedLabel").textContent="No design selected";return}$("#fsSelectedLabel").textContent=l.type==="text"?`Text: ${l.text}`:`Image: ${l.name}`;$("#fsSize").value=Math.round(l.scale*100);$("#fsRotate").value=Math.round(l.rotation);$("#fsSizeValue").textContent=`${Math.round(l.scale*100)}%`;$("#fsRotateValue").textContent=`${Math.round(l.rotation)}°`;$("#sizeRange")?.value=Math.round(l.scale*100);$("#rotateRange")?.value=Math.round(l.rotation)}
-function openFullscreen(){if(!renderer)return;fsOpen=true;$("#fullscreenEditor").classList.add("open");$("#fullscreenEditor").setAttribute("aria-hidden","false");$("#fsStage").appendChild(renderer.domElement);renderer.domElement.style.width="100%";renderer.domElement.style.height="100%";setBackView(true);syncEditUI();setTimeout(resize,30)}
-function closeFullscreen(){if(!fsOpen)return;fsOpen=false;$("#fullscreenEditor").classList.remove("open");$("#fullscreenEditor").setAttribute("aria-hidden","true");$("#stage").appendChild(renderer.domElement);renderer.domElement.style.width="100%";renderer.domElement.style.height="100%";setMode("orbit");resetView();setTimeout(resize,30)}
-function setBackView(full=false){if(!camera||!controls)return;controls.enabled=false;camera.position.set(0,0,-5.35);controls.target.set(0,0,0);controls.update();mode="edit";$("#orbitTool")?.classList.remove("active");$("#editTool")?.classList.add("active");$("#editFloating")?.classList.add("show");$("#hint").textContent="Back view • drag your design to position it";if(full)syncEditUI()}
-function keyHandler(e){if(fsOpen&&e.key==="Escape"){closeFullscreen();return}if(!selected()||(!fsOpen&&mode!=="edit"))return;const l=selected();if(e.key==="Delete"||e.key==="Backspace"){e.preventDefault();deleteSelected();return}if(e.key.startsWith("Arrow")){e.preventDefault();const step=e.shiftKey?30:10;if(e.key==="ArrowLeft")l.x-=step;if(e.key==="ArrowRight")l.x+=step;if(e.key==="ArrowUp")l.y-=step;if(e.key==="ArrowDown")l.y+=step;drawArtwork();syncEditUI();return}if(e.key==="+"||e.key==="="){setSelectedSize(l.scale*100+10);return}if(e.key==="-"||e.key==="_"){setSelectedSize(l.scale*100-10);return}if(e.key==="]"){setSelectedRotation(l.rotation+5);return}if(e.key==="["){setSelectedRotation(l.rotation-5);return}if(e.key.toLowerCase()==="r"){centerSelected();return}}
-window.addEventListener("keydown",keyHandler);
-function saveCustomCase(){if(!activeDevice)return;const preview=canvas?.toDataURL("image/jpeg",.78)||"";const safe=layers.map(l=>({type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",x:l.x,y:l.y,scale:l.scale,rotation:l.rotation}));localStorage.setItem("hadi_custom_case_draft",JSON.stringify({kind:"custom_case",phone_model:activeDevice.phone_model,case_color:caseColor,preview,layers:safe,created_at:new Date().toISOString()}));toast("Custom case saved")}
-addEventListener("resize",resize);initUI();await loadDevices();await loadCase();updateSummary();renderLayers();
+async function loadMain(){
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(32,1,.01,1000);renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
+  $("#stage").innerHTML="";$("#stage").appendChild(renderer.domElement);lights(scene);
+  try{caseRoot=(await new GLTFLoader().loadAsync(MODEL)).scene;normalize(caseRoot);scene.add(caseRoot);artMesh=makeArtPlane(artTexture);caseRoot.add(artMesh);recolor(caseRoot)}
+  catch(e){console.error(e);$("#stage").innerHTML='<div class="loading">3D case file could not load.<br>Check assets/models/iphone_17_pro_case_master.glb</div>';return}
+  controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.055;controls.enablePan=false;controls.rotateSpeed=.75;controls.zoomSpeed=.7;controls.minDistance=3;controls.maxDistance=8;controls.target.set(0,0,0);
+  camera.position.set(0,0,5.1);controls.update();resizeMain();mainLoop();attachDrag(renderer.domElement,false);
+}
+function lights(s){s.add(new THREE.HemisphereLight(0xffffff,0x93a6c0,2.5));let a=new THREE.DirectionalLight(0xffffff,3);a.position.set(4,6,7);s.add(a);let b=new THREE.DirectionalLight(0xb8d9ff,1.5);b.position.set(-4,-2,5);s.add(b)}
+function normalize(o){const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());o.position.sub(c);o.scale.setScalar(3.45/Math.max(sz.x,sz.y,sz.z))}
+function resizeMain(){if(!renderer)return;let r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
+function mainLoop(){controls?.update();renderer?.render(scene,camera);raf=requestAnimationFrame(mainLoop)}
+function zoomMain(f){if(camera){camera.position.multiplyScalar(f);controls?.update()}}
+function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,0,-5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId)setMode("edit")}
+
+async function openFull(){
+  if(!selectedId && !layers.length){toast("Add a photo or text first");return}
+  if(!selectedId && layers.length)selectLayer(layers[layers.length-1].id);
+  $("#fullEditor").classList.add("open");document.body.style.overflow="hidden";
+  fsScene=new THREE.Scene();fsCamera=new THREE.PerspectiveCamera(29,1,.01,1000);fsRenderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  fsRenderer.setPixelRatio(Math.min(devicePixelRatio,2));fsRenderer.outputColorSpace=THREE.SRGBColorSpace;fsRenderer.toneMapping=THREE.ACESFilmicToneMapping;fsRenderer.toneMappingExposure=1.08;
+  $("#fsStage").innerHTML="";$("#fsStage").appendChild(fsRenderer.domElement);lights(fsScene);
+  fsCase=caseRoot.clone(true); // cloned current model + artwork plane
+  // Replace cloned artwork material with same live texture.
+  fsCase.traverse(o=>{if(o.name==="CUSTOM_PRINT_SURFACE"){fsArt=o;o.material=o.material.clone();o.material.map=artTexture;o.material.needsUpdate=true}});
+  fsScene.add(fsCase);recolor(fsCase);
+  fsCamera.position.set(0,-.1,-4.65);
+  fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.target.set(0,-.28,0);fsControls.update();
+  resizeFull();fullLoop();attachDrag(fsRenderer.domElement,true);syncEditor();
+}
+function closeFull(){cancelAnimationFrame(fsRaf);fsControls?.dispose();fsRenderer?.dispose();fsScene=fsCamera=fsRenderer=fsControls=fsCase=fsArt=null;$("#fullEditor").classList.remove("open");document.body.style.overflow=""}
+function resizeFull(){if(!fsRenderer)return;let r=$("#fsStage").getBoundingClientRect();fsRenderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);fsCamera.aspect=r.width/r.height;fsCamera.updateProjectionMatrix()}
+function fullLoop(){fsRenderer?.render(fsScene,fsCamera);fsRaf=requestAnimationFrame(fullLoop)}
+function zoomFull(f){if(fsCamera)fsCamera.position.multiplyScalar(f)}
+
+function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit")backView()}
+function attachDrag(el,full){
+  el.addEventListener("pointerdown",e=>{if((!full&&mode!=="edit")||!selected())return;drag={sx:e.clientX,sy:e.clientY,x:selected().x,y:selected().y,full};el.setPointerCapture?.(e.pointerId)});
+  el.addEventListener("pointermove",e=>{if(!drag||drag.full!==full)return;let r=el.getBoundingClientRect(),l=selected();if(!l)return;l.x=drag.x-(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05;l.y=drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05;redraw()});
+  const end=()=>drag=null;el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
+}
+
+async function uploadPhoto(e){
+  const f=e.target.files?.[0];if(!f)return;if(!/^image\/(jpeg|png|webp)$/.test(f.type)){toast("Use JPG, PNG or WEBP");return}
+  if(f.size>10*1024*1024){toast("Image must be under 10 MB");return}
+  try{
+    let im=await createImageBitmap(f);
+    let l={id:id(),type:"image",name:f.name,image:im,x:450,y:675,scale:1,rotation:0};layers.push(l);selectLayer(l.id);redraw();setMode("edit");backView();toast("Photo added to the back");
+  }catch(err){console.error(err);toast("Could not open this image")}
+  e.target.value="";
+}
+function addText(){
+  let text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}
+  let l={id:id(),type:"text",name:text,text,font:$("#fontSelect").value,color:$("#textColor").value,x:450,y:675,scale:1,rotation:0};layers.push(l);$("#textInput").value="";$("#textForm").classList.remove("open");selectLayer(l.id);redraw();setMode("edit");backView();toast("Text added to the back")
+}
+function redraw(){
+  if(!artCtx)return;artCtx.clearRect(0,0,900,1350);
+  for(let l of layers){artCtx.save();artCtx.translate(l.x,l.y);artCtx.rotate(l.rotation*Math.PI/180);
+    if(l.type==="image"){let fit=Math.min(650/l.image.width,900/l.image.height),w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;artCtx.drawImage(l.image,-w/2,-h/2,w,h)}
+    else{let size=105*l.scale;artCtx.font=`700 ${size}px "${l.font}"`;artCtx.textAlign="center";artCtx.textBaseline="middle";artCtx.fillStyle=l.color;artCtx.fillText(l.text,0,0,820)}
+    artCtx.restore()}
+  artTexture.needsUpdate=true;
+}
+function selectLayer(i){selectedId=i;renderLayers();syncEditor()}
+function renderLayers(){
+  let box=$("#layers");if(!layers.length){box.innerHTML='<span class="sub">No design added yet.</span>';return}
+  box.innerHTML=layers.slice().reverse().map(l=>`<div class="layer ${l.id===selectedId?"on":""}"><span>${l.type==="text"?"T":"▧"} &nbsp;${escapeHtml(l.name)}</span><button data-layer="${l.id}">Edit</button></div>`).join("");
+  box.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{selectLayer(b.dataset.layer);setMode("edit")});
+}
+function syncEditor(){
+  let l=selected();$("#editor").classList.toggle("show",!!l);if(!l)return;$("#editorTitle").textContent=l.type==="text"?"Edit text":"Edit photo";$("#sizeRange").value=Math.round(l.scale*100);$("#rotationRange").value=l.rotation;$("#fsSize").value=Math.round(l.scale*100);$("#fsRotate").value=l.rotation;
+}
+function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);$("#fsSize").value=Math.round(v*100);redraw()}
+function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;$("#fsRotate").value=v;redraw()}
+function moveSelected(dx,dy){let l=selected();if(!l)return;l.x+=dx;l.y+=dy;redraw()}
+function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=675;redraw()}
+function deleteSelected(){if(!selectedId)return;layers=layers.filter(l=>l.id!==selectedId);selectedId=layers.at(-1)?.id||null;redraw();renderLayers();syncEditor()}
+
+window.addEventListener("resize",()=>{resizeMain();resizeFull()});
+window.addEventListener("keydown",e=>{
+  if(!selected()||["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName))return;
+  let n=e.shiftKey?20:6;
+  if(e.key==="ArrowLeft"){e.preventDefault();moveSelected(-n,0)}
+  if(e.key==="ArrowRight"){e.preventDefault();moveSelected(n,0)}
+  if(e.key==="ArrowUp"){e.preventDefault();moveSelected(0,-n)}
+  if(e.key==="ArrowDown"){e.preventDefault();moveSelected(0,n)}
+  if(e.key==="Delete"){e.preventDefault();deleteSelected()}
+  if(e.key==="Escape"&&$("#fullEditor").classList.contains("open"))closeFull();
+});
+
+buildUI();createArtwork();renderLayers();loadMain();
