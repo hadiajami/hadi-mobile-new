@@ -1,256 +1,50 @@
-import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-
-const $=s=>document.querySelector(s);
-const MODEL="assets/models/iphone_17_pro_case_master.glb";
-const COLORS=[["White","#efefed"],["Black","#17181b"],["Graphite","#4c5158"],["Navy","#263a5f"],["Sky","#8db9d5"],["Blue","#416ea6"],["Pink","#d7a6b3"],["Rose","#b66d7c"],["Purple","#776695"],["Lavender","#b7a9ce"],["Sage","#9eaa91"],["Green","#54725d"],["Mint","#a5c7b5"],["Sand","#c8b89c"],["Brown","#775c49"],["Orange","#d2763d"],["Red","#b53b43"],["Yellow","#ddc75d"]];
-const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Verdana","Trebuchet MS","Impact","Courier New","Times New Roman"];
-
-let scene,camera,renderer,controls,caseRoot,artMesh,artCanvas,artCtx,artTexture,raf;
-let fsScene,fsCamera,fsRenderer,fsControls,fsCase,fsArt,fsRaf;
-let caseColor="#efefed", layers=[], selectedId=null, mode="rotate", drag=null;
-
-function toast(s){const t=$("#toast");t.textContent=s;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1500)}
-function selected(){return layers.find(x=>x.id===selectedId)}
-function id(){return "l"+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-
-function buildUI(){
-  $("#swatches").innerHTML=COLORS.map(([n,c],i)=>`<button class="swatch ${i===0?"on":""}" style="background:${c}" data-color="${c}" title="${n}"></button>`).join("")+`<label class="swatch custom" title="Any color"><input id="customColor" type="color" value="${caseColor}"></label>`;
-  $("#fontSelect").innerHTML=FONTS.map(f=>`<option value="${f}" style="font-family:'${f}'">${f}</option>`).join("");
-  document.querySelectorAll("[data-color]").forEach(b=>b.onclick=()=>setColor(b.dataset.color,b));
-  $("#customColor").oninput=e=>setColor(e.target.value);
-  $("#quickColor").oninput=e=>setColor(e.target.value);
-  $("#photoInput").onchange=uploadPhoto;
-  $("#textToggle").onclick=()=>$("#textForm").classList.toggle("open");
-  $("#addText").onclick=addText;
-  $("#textInput").onkeydown=e=>{if(e.key==="Enter")addText()};
-  $("#sizeRange").oninput=e=>changeScale(+e.target.value/100);
-  $("#rotationRange").oninput=e=>changeRotation(+e.target.value);
-  $("#fsSize").oninput=e=>changeScale(+e.target.value/100);
-  $("#fsRotate").oninput=e=>changeRotation(+e.target.value);
-  document.querySelectorAll("[data-move]").forEach(b=>b.onclick=()=>{let [x,y]=b.dataset.move.split(",").map(Number);moveSelected(x,y)});
-  $("#centerBtn").onclick=centerSelected; $("#fsCenter").onclick=centerSelected;
-  $("#deleteBtn").onclick=deleteSelected; if($("#fsDelete"))$("#fsDelete").onclick=deleteSelected;
-  if($("#confirmPlacement"))$("#confirmPlacement").onclick=confirmPlacement; if($("#fsConfirm"))$("#fsConfirm").onclick=()=>{confirmPlacement();closeFull()};
-  if($("#removeBgBtn"))$("#removeBgBtn").onclick=removeBackground; if($("#fsRemoveBg"))$("#fsRemoveBg").onclick=removeBackground;
-  if($("#fsFit"))$("#fsFit").onclick=fitFullCase;
-  if($("#fsZoomIn"))$("#fsZoomIn").onclick=()=>zoomFull(.86); if($("#fsZoomOut"))$("#fsZoomOut").onclick=()=>zoomFull(1.16);
+import * as THREE from "three";import{GLTFLoader}from"three/addons/loaders/GLTFLoader.js";import{OrbitControls}from"three/addons/controls/OrbitControls.js";
+const $=s=>document.querySelector(s),MODEL="assets/models/iphone_17_pro_case_master.glb";
+const COLORS=["#efefed","#17181b","#565b62","#293b5c","#8db7d0","#557ba9","#d8a9b6","#b66f7e","#7a6995","#a2ad94","#55735e","#c7b99e","#d17a42","#b64249"];
+const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Verdana","Impact"];
+let scene,camera,renderer,controls,root,printMesh,color="#efefed";let layers=[],selected=null,drag=null,pointers=new Map(),pinch=null;
+const cv=$("#designCanvas"),ctx=cv.getContext("2d");const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;
+function toast(s){let t=$("#toast");t.textContent=s;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1300)}
+function rounded(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath()}
+function redraw(){ctx.clearRect(0,0,900,1860);for(const l of layers){ctx.save();ctx.translate(l.x,l.y);ctx.rotate(l.r*Math.PI/180);if(l.type==="image"){let f=Math.min(690/l.img.width,1050/l.img.height),w=l.img.width*f*l.s,h=l.img.height*f*l.s;ctx.drawImage(l.img,-w/2,-h/2,w,h)}else{ctx.fillStyle=l.color;ctx.font=`700 ${145*l.s}px "${l.font}"`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(l.text,0,0,820)}ctx.restore()}
+ // true case silhouette
+ ctx.save();ctx.globalCompositeOperation="destination-in";rounded(ctx,38,20,824,1818,105);ctx.fill();ctx.restore();
+ // entire camera plateau is protected
+ ctx.save();ctx.globalCompositeOperation="destination-out";rounded(ctx,42,16,816,555,108);ctx.fill();ctx.restore();
+ tex.needsUpdate=true}
+function active(){return layers.find(l=>l.id===selected)}
+function choose(id){selected=id;let l=active();$("#layerName").textContent=l?(l.type==="text"?"Text: ":"Photo: ")+l.name:"No layer selected";if(l){$("#scale").value=l.s*100;$("#rotation").value=l.r;if(l.type==="text"){$("#textValue").value=l.text;$("#font").value=l.font;$("#textColor").value=l.color}}}
+async function addImage(file){if(!file)return;try{let img=await createImageBitmap(file),l={id:crypto.randomUUID(),type:"image",name:file.name,img,x:450,y:1120,s:1,r:0};layers.push(l);choose(l.id);redraw();openEditor()}catch(e){console.error(e);toast("Could not open image")}}
+async function addText(){try{await document.fonts.ready}catch(e){}let l={id:crypto.randomUUID(),type:"text",name:"Text",text:"Your text",font:"Manrope",color:"#111111",x:450,y:1120,s:1,r:0};layers.push(l);choose(l.id);redraw();openEditor();$("#textValue").focus();$("#textValue").select()}
+function openEditor(){history.pushState({caseEditor:true},"");$("#editor").classList.add("open");document.body.style.overflow="hidden"}
+function closeEditor(){if(!$("#editor").classList.contains("open"))return;$("#editor").classList.remove("open");document.body.style.overflow="";backView();toast("Design applied to 3D")}
+function backView(){camera.position.set(0,-.1,-6.1);controls.target.set(0,-.2,0);camera.lookAt(controls.target);controls.update()}
+function fit(){camera.position.set(0,-.1,-6.4);controls.target.set(0,-.2,0);camera.lookAt(controls.target);controls.update()}
+function setupUI(){$("#swatches").innerHTML=COLORS.map((c,i)=>`<button type="button" class="sw ${i?"":"on"}" data-c="${c}" style="background:${c}"></button>`).join("");document.querySelectorAll("[data-c]").forEach(b=>b.addEventListener("click",()=>{color=b.dataset.c;document.querySelectorAll(".sw").forEach(x=>x.classList.toggle("on",x===b));recolor()}));
+ $("#font").innerHTML=FONTS.map(f=>`<option value="${f}">${f}</option>`).join("");
+ $("#photo").onchange=e=>{addImage(e.target.files[0]);e.target.value=""};$("#photoInside").onchange=e=>{addImage(e.target.files[0]);e.target.value=""};
+ $("#addTextQuick").onclick=addText;$("#newText").onclick=addText;$("#addPhotoInside").onclick=()=>$("#photoInside").click();$("#editDesign").onclick=openEditor;
+ $("#closeEditor").onclick=closeEditor;$("#apply3d").onclick=closeEditor;$("#backView").onclick=backView;$("#fit").onclick=fit;
+ $("#zin").onclick=()=>{camera.position.multiplyScalar(.88);controls.update()};$("#zout").onclick=()=>{camera.position.multiplyScalar(1.12);controls.update()};
+ $("#scale").oninput=e=>{let l=active();if(l){l.s=+e.target.value/100;redraw()}};$("#rotation").oninput=e=>{let l=active();if(l){l.r=+e.target.value;redraw()}};
+ $("#center").onclick=()=>{let l=active();if(l){l.x=450;l.y=1120;redraw()}};
+ $("#del").onclick=()=>{if(!selected)return;layers=layers.filter(l=>l.id!==selected);selected=layers.at(-1)?.id||null;choose(selected);redraw()};
+ $("#textValue").oninput=e=>{let l=active();if(l?.type==="text"){l.text=e.target.value;l.name=e.target.value||"Text";redraw();choose(l.id)}};
+ $("#font").onchange=async e=>{let l=active();if(l?.type==="text"){l.font=e.target.value;try{await document.fonts.load(`700 145px "${l.font}"`)}catch{}redraw()}};
+ $("#textColor").oninput=e=>{let l=active();if(l?.type==="text"){l.color=e.target.value;redraw()}};
+ $("#removeBg").onclick=removeBg;
+ window.addEventListener("popstate",()=>{if($("#editor").classList.contains("open")){$("#editor").classList.remove("open");document.body.style.overflow="";backView()}});
 }
-
-function setColor(c,btn){
-  caseColor=c; $("#quickColor").value=c; const cc=$("#customColor"); if(cc)cc.value=c;
-  document.querySelectorAll("[data-color]").forEach(x=>x.classList.toggle("on",x===btn));
-  recolor(caseRoot); recolor(fsCase);
-}
-function recolor(root){
-  if(!root)return; const c=new THREE.Color(caseColor);
-  root.traverse(o=>{if(!o.isMesh)return; const n=(o.name||"").toLowerCase(); if(n.includes("camera control")||o.name==="CUSTOM_PRINT_SURFACE")return;
-    const arr=Array.isArray(o.material)?o.material:[o.material]; const cloned=arr.map(m=>{m=m.clone();if(m.color)m.color.copy(c);m.roughness=.76;m.metalness=.01;return m});o.material=Array.isArray(o.material)?cloned:cloned[0];
-  });
-}
-
-function createArtwork(){
-  artCanvas=document.createElement("canvas");artCanvas.width=900;artCanvas.height=1860;artCtx=artCanvas.getContext("2d");
-  artTexture=new THREE.CanvasTexture(artCanvas);artTexture.colorSpace=THREE.SRGBColorSpace;artTexture.anisotropy=8;
-  redraw();
-}
-function makeArtPlane(texture){
-  const g=new THREE.PlaneGeometry(69.2,143.5);
-  const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1});
-  const p=new THREE.Mesh(g,m);
-  // Exact master GLB: rear face is negative Z. Keep print below camera plateau.
-  p.position.set(0,-2.0,-7.60);p.rotation.y=Math.PI;p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
-  return p;
-}
-async function loadMain(){
-  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(32,1,.01,1000);renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
-  $("#stage").innerHTML="";$("#stage").appendChild(renderer.domElement);lights(scene);
-  try{caseRoot=(await new GLTFLoader().loadAsync(MODEL)).scene;normalize(caseRoot);scene.add(caseRoot);artMesh=makeArtPlane(artTexture);caseRoot.add(artMesh);recolor(caseRoot)}
-  catch(e){console.error(e);$("#stage").innerHTML='<div class="loading">3D case file could not load.<br>Check assets/models/iphone_17_pro_case_master.glb</div>';return}
-  controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.055;controls.enablePan=false;controls.rotateSpeed=.75;controls.zoomSpeed=.7;controls.minDistance=3;controls.maxDistance=8;controls.target.set(0,0,0);
-  camera.position.set(0,0,5.1);controls.update();resizeMain();mainLoop();attachDrag(renderer.domElement,false);
-}
-function lights(s){s.add(new THREE.HemisphereLight(0xffffff,0x93a6c0,2.5));let a=new THREE.DirectionalLight(0xffffff,3);a.position.set(4,6,7);s.add(a);let b=new THREE.DirectionalLight(0xb8d9ff,1.5);b.position.set(-4,-2,5);s.add(b)}
-function normalize(o){const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());o.position.sub(c);o.scale.setScalar(3.45/Math.max(sz.x,sz.y,sz.z))}
-function resizeMain(){if(!renderer)return;let r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
-function mainLoop(){controls?.update();renderer?.render(scene,camera);raf=requestAnimationFrame(mainLoop)}
-function zoomMain(f){if(!camera)return;const dir=Math.sign(camera.position.z)||1;const z=Math.min(8.2,Math.max(3.55,Math.abs(camera.position.z)*f));camera.position.z=dir*z;controls?.update()}
-function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,-.1,-5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId&&mode!=="edit")setMode("edit")}
-
-function openFull(){
-  if(!selectedId && !layers.length){toast("Add a photo or text first");return}
-  if(!selectedId && layers.length)selectLayer(layers[layers.length-1].id);
-  $("#fullEditor").classList.add("open");document.body.style.overflow="hidden";
-  $("#fsStage").appendChild(renderer.domElement);
-  mode="edit";controls.enabled=false;
-  camera.position.set(0,-.1,-7.15);controls.target.set(0,-.28,0);camera.lookAt(controls.target);
-  resizeFull();attachDrag(renderer.domElement,true);syncEditor();
-}
-function closeFull(){
-  if(!renderer)return;
-  $("#stage").appendChild(renderer.domElement);
-  $("#fullEditor").classList.remove("open");document.body.style.overflow="";
-  mode="rotate";controls.enabled=true;
-  camera.position.set(0,-.1,-6.25);controls.target.set(0,-.25,0);camera.lookAt(controls.target);controls.update();
-  resizeMain();$("#rotateMode")?.classList.add("on");$("#editMode")?.classList.remove("on");
-  $("#viewerNote").textContent="Drag to rotate • Pinch to zoom";
-}
-function resizeFull(){if(!renderer)return;const r=$("#fsStage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
-function fullLoop(){}
-function zoomFull(f){if(!camera)return;const z=Math.min(9.2,Math.max(4,Math.abs(camera.position.z)*f));camera.position.set(0,-.1,-z);camera.lookAt(0,-.28,0)}
-function fitFullCase(){if(!camera)return;camera.position.set(0,-.1,-7.35);camera.lookAt(0,-.28,0)}
-function confirmPlacement(){
-  if(!selected())return;
-  if($("#fullEditor").classList.contains("open")) closeFull();
-  else {mode="rotate";controls.enabled=true;$("#rotateMode")?.classList.add("on");$("#editMode")?.classList.remove("on");$("#viewerNote").textContent="Placement saved • Drag to rotate • Pinch to zoom";}
-  toast("Placement saved");
-}
-async function removeBackground(){
-  const l=selected();if(!l||l.type!=="image"){toast("Select a photo first");return}
-  toast("Removing background…");
-  try{
-    const mod=await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm");
-    const c=document.createElement("canvas");c.width=l.image.width;c.height=l.image.height;c.getContext("2d").drawImage(l.image,0,0);
-    const blob=await new Promise(r=>c.toBlob(r,"image/png"));const result=await mod.removeBackground(blob,{output:{format:"image/png"}});const bmp=await createImageBitmap(result);
-    try{l.image.close?.()}catch(e){} l.image=bmp;l.name=l.name.replace(/\.[^.]+$/,"")+" — no background";redraw();renderLayers();toast("Background removed");
-  }catch(err){console.error(err);toast("Background removal could not run on this device")}
-}
-function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit"&&camera&&controls){camera.position.set(0,-.1,-6.5);controls.target.set(0,-.25,0);controls.update()}}
-function attachDrag(el,full){
-  const k=full?"fsBound":"mainBound"; if(el.dataset[k])return; el.dataset[k]="1";
-  let touches=new Map(), pinchStart=null;
-  el.addEventListener("pointerdown",e=>{
-    if((!full&&mode!=="edit")||!selected())return;
-    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    el.setPointerCapture?.(e.pointerId);
-    if(touches.size===1){drag={sx:e.clientX,sy:e.clientY,x:selected().x,y:selected().y,full}}
-    if(touches.size===2){
-      const a=[...touches.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
-      pinchStart={distance:d,scale:selected().scale};drag=null;
-    }
-  },{passive:false});
-  el.addEventListener("pointermove",e=>{
-    if(!touches.has(e.pointerId))return;
-    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(touches.size>=2&&pinchStart){
-      e.preventDefault();const a=[...touches.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
-      changeScale(Math.max(.1,Math.min(4,pinchStart.scale*(d/pinchStart.distance))));return;
-    }
-    if(!drag||drag.full!==full)return;
-    e.preventDefault();let r=el.getBoundingClientRect(),l=selected();if(!l)return;
-    l.x=Math.max(55,Math.min(845,drag.x+(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05));
-    l.y=Math.max(600,Math.min(1780,drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05));redraw();
-  },{passive:false});
-  const end=e=>{touches.delete(e.pointerId);if(touches.size<2)pinchStart=null;if(touches.size===0)drag=null};
-  el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
-}
-
-async function uploadPhoto(e){
-  const f=e.target.files?.[0];if(!f)return;if(!/^image\/(jpeg|png|webp)$/.test(f.type)){toast("Use JPG, PNG or WEBP");return}
-  if(f.size>10*1024*1024){toast("Image must be under 10 MB");return}
-  try{
-    let im=await createImageBitmap(f);
-    let l={id:id(),type:"image",name:f.name,image:im,x:450,y:1160,scale:1,rotation:0};layers.push(l);selectLayer(l.id);redraw();setMode("edit");backView();toast("Photo added to the back");
-  }catch(err){console.error(err);toast("Could not open this image")}
-  e.target.value="";
-}
-async function addText(){
-  let text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}
-  const font=$("#fontSelect").value;
-  try{await document.fonts.load(`700 105px "${font}"`);await document.fonts.ready}catch(e){}
-  let l={id:id(),type:"text",name:text,text,font,color:$("#textColor").value,x:450,y:1160,scale:1,rotation:0};
-  layers.push(l);$("#textInput").value="";$("#textForm").classList.remove("open");selectLayer(l.id);redraw();setMode("edit");toast("Text added — drag it directly on the back")
-}
-function redraw(){
-  if(!artCtx)return;artCtx.clearRect(0,0,900,1350);
-  for(let l of layers){artCtx.save();artCtx.translate(l.x,l.y);artCtx.rotate(l.rotation*Math.PI/180);
-    if(l.type==="image"){let fit=Math.min(650/l.image.width,900/l.image.height),w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;artCtx.drawImage(l.image,-w/2,-h/2,w,h)}
-    else{let size=145*l.scale;artCtx.font=`700 ${size}px "${l.font}"`;artCtx.textAlign="center";artCtx.textBaseline="middle";artCtx.fillStyle=l.color;artCtx.fillText(l.text,0,0,820)}
-    artCtx.restore()}
-  // Clip artwork to the REAL exterior printable back.
-  // 1) Nothing may exist outside the case silhouette.
-  artCtx.save();
-  artCtx.globalCompositeOperation="destination-in";
-  const ox=36,oy=22,ow=828,oh=1816,or=105;
-  artCtx.beginPath();
-  artCtx.moveTo(ox+or,oy);artCtx.lineTo(ox+ow-or,oy);artCtx.quadraticCurveTo(ox+ow,oy,ox+ow,oy+or);
-  artCtx.lineTo(ox+ow,oy+oh-or);artCtx.quadraticCurveTo(ox+ow,oy+oh,ox+ow-or,oy+oh);
-  artCtx.lineTo(ox+or,oy+oh);artCtx.quadraticCurveTo(ox,oy+oh,ox,oy+oh-or);
-  artCtx.lineTo(ox,oy+or);artCtx.quadraticCurveTo(ox,oy,ox+or,oy);artCtx.closePath();artCtx.fill();
-  artCtx.restore();
-
-  // 2) The complete raised camera zone is NON-printable, not only its hole.
-  // This prevents artwork appearing on/above the camera frame when moved/rotated.
-  artCtx.save();
-  artCtx.globalCompositeOperation="destination-out";
-  const cx=46,cy=18,cw=808,ch=548,cr=104;
-  artCtx.beginPath();
-  artCtx.moveTo(cx+cr,cy);artCtx.lineTo(cx+cw-cr,cy);artCtx.quadraticCurveTo(cx+cw,cy,cx+cw,cy+cr);
-  artCtx.lineTo(cx+cw,cy+ch-cr);artCtx.quadraticCurveTo(cx+cw,cy+ch,cx+cw-cr,cy+ch);
-  artCtx.lineTo(cx+cr,cy+ch);artCtx.quadraticCurveTo(cx,cy+ch,cx,cy+ch-cr);
-  artCtx.lineTo(cx,cy+cr);artCtx.quadraticCurveTo(cx,cy,cx+cr,cy);artCtx.closePath();artCtx.fill();
-  artCtx.restore();
-  artTexture.needsUpdate=true;
-}
-function selectLayer(i){selectedId=i;renderLayers();syncEditor()}
-function renderLayers(){
-  let box=$("#layers");if(!layers.length){box.innerHTML='<span class="sub">No design added yet.</span>';return}
-  box.innerHTML=layers.slice().reverse().map(l=>`<div class="layer ${l.id===selectedId?"on":""}"><span>${l.type==="text"?"T":"▧"} &nbsp;${escapeHtml(l.name)}</span><button data-layer="${l.id}">Edit</button></div>`).join("");
-  box.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{selectLayer(b.dataset.layer);setMode("edit")});
-}
-function syncEditor(){
-  let l=selected();$("#editor").classList.toggle("show",!!l);if(!l)return;$("#editorTitle").textContent=l.type==="text"?"Edit text":"Edit photo";$("#sizeRange").value=Math.round(l.scale*100);$("#rotationRange").value=l.rotation;if($("#fsSize"))$("#fsSize").value=Math.round(l.scale*100);if($("#fsRotate"))$("#fsRotate").value=l.rotation;
-}
-function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);if($("#fsSize"))$("#fsSize").value=Math.round(v*100);redraw()}
-function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;if($("#fsRotate"))$("#fsRotate").value=v;redraw()}
-function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(55,Math.min(845,l.x+dx));l.y=Math.max(600,Math.min(1780,l.y+dy));redraw()}
-function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=1160;redraw()}
-function deleteSelected(){if(!selectedId)return;layers=layers.filter(l=>l.id!==selectedId);selectedId=layers.at(-1)?.id||null;redraw();renderLayers();syncEditor()}
-
-window.addEventListener("resize",()=>{resizeMain();resizeFull()});
-window.addEventListener("keydown",e=>{
-  if(!selected()||["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName))return;
-  let n=e.shiftKey?20:6;
-  if(e.key==="ArrowLeft"){e.preventDefault();moveSelected(-n,0)}
-  if(e.key==="ArrowRight"){e.preventDefault();moveSelected(n,0)}
-  if(e.key==="ArrowUp"){e.preventDefault();moveSelected(0,-n)}
-  if(e.key==="ArrowDown"){e.preventDefault();moveSelected(0,n)}
-  if(e.key==="Delete"){e.preventDefault();deleteSelected()}
-  if(e.key==="Escape"&&$("#fullEditor").classList.contains("open"))closeFull();
-});
-
-
-
-function installReliableControls(){
-  const actions={
-    backView:()=>backView(false), openFull:()=>openFull(), fullFromEdit:()=>openFull(),
-    rotateMode:()=>setMode("rotate"), editMode:()=>setMode("edit"),
-    zoomIn:()=>zoomMain(.84), zoomOut:()=>zoomMain(1.18),
-    closeFull:()=>closeFull(), fsZoomIn:()=>zoomFull(.86), fsZoomOut:()=>zoomFull(1.16),
-    fsFit:()=>fitFullCase(), fsCenter:()=>centerSelected(), fsConfirm:()=>confirmPlacement(),
-    confirmPlacement:()=>confirmPlacement(), centerBtn:()=>centerSelected(),
-    deleteBtn:()=>deleteSelected(), removeBgBtn:()=>removeBackground(), fsRemoveBg:()=>removeBackground()
-  };
-  document.addEventListener("pointerup",e=>{
-    const b=e.target.closest("button");
-    if(!b||!actions[b.id])return;
-    e.preventDefault();e.stopPropagation();actions[b.id]();
-  },true);
-}
-
-function preventBrowserZoom(){
-  const targets=[document.getElementById("stage"),document.getElementById("fsStage")].filter(Boolean);
-  for(const el of targets){el.style.touchAction="none";
-    ["gesturestart","gesturechange","gestureend"].forEach(type=>el.addEventListener(type,e=>e.preventDefault(),{passive:false}));
-    let lastTouchEnd=0;
-    el.addEventListener("touchend",e=>{const now=Date.now();if(now-lastTouchEnd<=320)e.preventDefault();lastTouchEnd=now},{passive:false});
-  }
-}
-
-createArtwork();
-renderLayers();
-loadMain().catch(err=>{console.error("Case load failed:",err);const s=document.getElementById("stage");if(s)s.innerHTML='<div class="loading">Could not load 3D case. Please refresh once.</div>'});
-try{buildUI();installReliableControls();preventBrowserZoom()}catch(err){console.error("Case Studio UI init error:",err)}
+function recolor(){if(!root)return;let c=new THREE.Color(color);root.traverse(o=>{if(!o.isMesh||o===printMesh)return;let a=Array.isArray(o.material)?o.material:[o.material];let n=a.map(m=>{m=m.clone();if(m.color)m.color.copy(c);m.roughness=.78;return m});o.material=Array.isArray(o.material)?n:n[0]})}
+async function init3d(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(31,1,.01,100);renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;$("#stage").innerHTML="";$("#stage").appendChild(renderer.domElement);scene.add(new THREE.HemisphereLight(0xffffff,0x94a5bb,2.6));let d=new THREE.DirectionalLight(0xffffff,3);d.position.set(4,6,7);scene.add(d);
+ root=(await new GLTFLoader().loadAsync(MODEL)).scene;let b=new THREE.Box3().setFromObject(root),sz=b.getSize(new THREE.Vector3()),ce=b.getCenter(new THREE.Vector3());root.position.sub(ce);root.scale.setScalar(3.45/Math.max(sz.x,sz.y,sz.z));scene.add(root);
+ let g=new THREE.PlaneGeometry(69.2,143.5),m=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1});printMesh=new THREE.Mesh(g,m);printMesh.position.set(0,-2,-7.6);printMesh.rotation.y=Math.PI;printMesh.renderOrder=10;root.add(printMesh);recolor();
+ controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.enablePan=false;controls.minDistance=3.6;controls.maxDistance=9;fit();resize();(function loop(){controls.update();renderer.render(scene,camera);requestAnimationFrame(loop)})()}
+function resize(){if(!renderer)return;let r=$("#stage").getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
+function canvasPoint(e){let r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*900/r.width,y:(e.clientY-r.top)*1860/r.height}}
+cv.addEventListener("pointerdown",e=>{if(!active())return;e.preventDefault();cv.setPointerCapture?.(e.pointerId);let p=canvasPoint(e);pointers.set(e.pointerId,p);if(pointers.size===1){let l=active();drag={px:p.x,py:p.y,x:l.x,y:l.y}}else if(pointers.size===2){let a=[...pointers.values()],l=active();pinch={d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),s:l.s};drag=null}},{passive:false});
+cv.addEventListener("pointermove",e=>{if(!pointers.has(e.pointerId)||!active())return;e.preventDefault();let p=canvasPoint(e);pointers.set(e.pointerId,p);let l=active();if(pointers.size>=2&&pinch){let a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);l.s=Math.max(.1,Math.min(4,pinch.s*d/pinch.d));$("#scale").value=l.s*100;redraw()}else if(drag){l.x=Math.max(45,Math.min(855,drag.x+p.x-drag.px));l.y=Math.max(580,Math.min(1800,drag.y+p.y-drag.py));redraw()}},{passive:false});
+function pend(e){pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;if(!pointers.size)drag=null}cv.addEventListener("pointerup",pend);cv.addEventListener("pointercancel",pend);
+async function removeBg(){let l=active();if(!l||l.type!=="image"){toast("Select a photo first");return}toast("Removing background…");try{let mod=await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm"),c=document.createElement("canvas");c.width=l.img.width;c.height=l.img.height;c.getContext("2d").drawImage(l.img,0,0);let blob=await new Promise(r=>c.toBlob(r,"image/png")),res=await mod.removeBackground(blob,{output:{format:"image/png"}});l.img=await createImageBitmap(res);redraw();toast("Background removed")}catch(e){console.error(e);toast("Could not remove background")}}
+["gesturestart","gesturechange","gestureend"].forEach(t=>document.addEventListener(t,e=>{if($("#editor").classList.contains("open"))e.preventDefault()},{passive:false}));
+setupUI();redraw();init3d().catch(e=>{console.error(e);$("#stage").innerHTML='<div class="loading">Could not load 3D case.</div>'});window.addEventListener("resize",resize);
