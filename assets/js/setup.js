@@ -26,14 +26,6 @@ function buildUI(){
   $("#textToggle").onclick=()=>$("#textForm").classList.toggle("open");
   $("#addText").onclick=addText;
   $("#textInput").onkeydown=e=>{if(e.key==="Enter")addText()};
-  $("#rotateMode").onclick=()=>setMode("rotate");
-  $("#editMode").onclick=()=>setMode("edit");
-  $("#backView").onclick=()=>backView(false);
-  $("#zoomIn").onclick=()=>zoomMain(.84);
-  $("#zoomOut").onclick=()=>zoomMain(1.18);
-  $("#openFull").onclick=openFull;
-  $("#fullFromEdit").onclick=openFull;
-  $("#closeFull").onclick=closeFull;
   $("#sizeRange").oninput=e=>changeScale(+e.target.value/100);
   $("#rotationRange").oninput=e=>changeRotation(+e.target.value);
   $("#fsSize").oninput=e=>changeScale(+e.target.value/100);
@@ -54,7 +46,7 @@ function setColor(c,btn){
 }
 function recolor(root){
   if(!root)return; const c=new THREE.Color(caseColor);
-  root.traverse(o=>{if(!o.isMesh)return; const n=(o.name||"").toLowerCase(); if(n.includes("camera control"))return;
+  root.traverse(o=>{if(!o.isMesh)return; const n=(o.name||"").toLowerCase(); if(n.includes("camera control")||o.name==="CUSTOM_PRINT_SURFACE")return;
     const arr=Array.isArray(o.material)?o.material:[o.material]; const cloned=arr.map(m=>{m=m.clone();if(m.color)m.color.copy(c);m.roughness=.76;m.metalness=.01;return m});o.material=Array.isArray(o.material)?cloned:cloned[0];
   });
 }
@@ -69,7 +61,7 @@ function makeArtPlane(texture){
   const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4});
   const p=new THREE.Mesh(g,m);
   // Exact master GLB: rear face is negative Z. Keep print below camera plateau.
-  p.position.set(0,-2.0,7.58);p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
+  p.position.set(0,-2.0,-7.60);p.rotation.y=Math.PI;p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
   return p;
 }
 async function loadMain(){
@@ -86,7 +78,7 @@ function normalize(o){const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new
 function resizeMain(){if(!renderer)return;let r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
 function mainLoop(){controls?.update();renderer?.render(scene,camera);raf=requestAnimationFrame(mainLoop)}
 function zoomMain(f){if(!camera)return;const dir=Math.sign(camera.position.z)||1;const z=Math.min(8.2,Math.max(3.55,Math.abs(camera.position.z)*f));camera.position.z=dir*z;controls?.update()}
-function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,-.1,5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId&&mode!=="edit")setMode("edit")}
+function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,-.1,-5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId&&mode!=="edit")setMode("edit")}
 
 async function openFull(){
   if(!selectedId && !layers.length){toast("Add a photo or text first");return}
@@ -99,16 +91,16 @@ async function openFull(){
   // Replace cloned artwork material with same live texture.
   fsCase.traverse(o=>{if(o.name==="CUSTOM_PRINT_SURFACE"){fsArt=o;o.material=o.material.clone();o.material.map=artTexture;o.material.needsUpdate=true}});
   fsScene.add(fsCase);recolor(fsCase);
-  fsCamera.position.set(0,-.1,6.2);
+  fsCamera.position.set(0,-.1,-6.2);
   fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.enableRotate=false;fsControls.enablePan=false;fsControls.enableZoom=false;fsControls.target.set(0,-.28,0);fsControls.update();
   resizeFull();fullLoop();attachDrag(fsRenderer.domElement,true);syncEditor();
 }
 function closeFull(){cancelAnimationFrame(fsRaf);fsControls?.dispose();fsRenderer?.dispose();fsScene=fsCamera=fsRenderer=fsControls=fsCase=fsArt=null;$("#fullEditor").classList.remove("open");document.body.style.overflow=""}
 function resizeFull(){if(!fsRenderer)return;let r=$("#fsStage").getBoundingClientRect();fsRenderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);fsCamera.aspect=r.width/r.height;fsCamera.updateProjectionMatrix()}
 function fullLoop(){fsRenderer?.render(fsScene,fsCamera);fsRaf=requestAnimationFrame(fullLoop)}
-function zoomFull(f){if(!fsCamera)return;fsCamera.position.z=Math.min(8.4,Math.max(3.55,Math.abs(fsCamera.position.z)*f));fsCamera.position.x=0;fsCamera.position.y=-.1;fsCamera.lookAt(0,-.28,0)}
-function fitFullCase(){if(!fsCamera)return;fsCamera.position.set(0,-.1,6.7);fsCamera.lookAt(0,-.28,0)}
-function confirmPlacement(){if(!selected())return;setMode("rotate");toast("Placement confirmed — rotate the case freely")}
+function zoomFull(f){if(!fsCamera)return;const z=Math.min(8.4,Math.max(3.55,Math.abs(fsCamera.position.z)*f));fsCamera.position.set(0,-.1,-z);fsCamera.lookAt(0,-.28,0)}
+function fitFullCase(){if(!fsCamera)return;fsCamera.position.set(0,-.1,-7.0);fsCamera.lookAt(0,-.28,0)}
+function confirmPlacement(){if(!selected())return;mode="rotate";if(controls)controls.enabled=true;$("#rotateMode")?.classList.add("on");$("#editMode")?.classList.remove("on");$("#viewerNote").textContent="Placement confirmed • Drag to rotate • Pinch to zoom";toast("Placement confirmed — rotate the case freely")}
 
 
 async function removeBackground(){
@@ -131,7 +123,7 @@ async function removeBackground(){
   }
 }
 
-function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit"&&camera&&controls){camera.position.set(0,-.1,5.0);controls.target.set(0,-.25,0);controls.update()}}
+function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit"&&camera&&controls){camera.position.set(0,-.1,-6.5);controls.target.set(0,-.25,0);controls.update()}}
 function attachDrag(el,full){
   let touches=new Map(), pinchStart=null;
   el.addEventListener("pointerdown",e=>{
@@ -223,6 +215,24 @@ window.addEventListener("keydown",e=>{
 });
 
 
+
+function installReliableControls(){
+  const actions={
+    backView:()=>backView(false), openFull:()=>openFull(), fullFromEdit:()=>openFull(),
+    rotateMode:()=>setMode("rotate"), editMode:()=>setMode("edit"),
+    zoomIn:()=>zoomMain(.84), zoomOut:()=>zoomMain(1.18),
+    closeFull:()=>closeFull(), fsZoomIn:()=>zoomFull(.86), fsZoomOut:()=>zoomFull(1.16),
+    fsFit:()=>fitFullCase(), fsCenter:()=>centerSelected(), fsConfirm:()=>{confirmPlacement();closeFull()},
+    confirmPlacement:()=>confirmPlacement(), centerBtn:()=>centerSelected(),
+    deleteBtn:()=>deleteSelected(), removeBgBtn:()=>removeBackground(), fsRemoveBg:()=>removeBackground()
+  };
+  document.addEventListener("pointerup",e=>{
+    const b=e.target.closest("button");
+    if(!b||!actions[b.id])return;
+    e.preventDefault();e.stopPropagation();actions[b.id]();
+  },true);
+}
+
 function preventBrowserZoom(){
   const targets=[document.getElementById("stage"),document.getElementById("fsStage")].filter(Boolean);
   for(const el of targets){el.style.touchAction="none";
@@ -235,4 +245,4 @@ function preventBrowserZoom(){
 createArtwork();
 renderLayers();
 loadMain().catch(err=>{console.error("Case load failed:",err);const s=document.getElementById("stage");if(s)s.innerHTML='<div class="loading">Could not load 3D case. Please refresh once.</div>'});
-try{buildUI();preventBrowserZoom()}catch(err){console.error("Case Studio UI init error:",err)}
+try{buildUI();installReliableControls();preventBrowserZoom()}catch(err){console.error("Case Studio UI init error:",err)}
