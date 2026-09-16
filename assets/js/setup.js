@@ -5,7 +5,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 const $=s=>document.querySelector(s);
 const MODEL="assets/models/iphone_17_pro_case_master.glb";
 const COLORS=[["White","#efefed"],["Black","#17181b"],["Graphite","#4c5158"],["Navy","#263a5f"],["Sky","#8db9d5"],["Blue","#416ea6"],["Pink","#d7a6b3"],["Rose","#b66d7c"],["Purple","#776695"],["Lavender","#b7a9ce"],["Sage","#9eaa91"],["Green","#54725d"],["Mint","#a5c7b5"],["Sand","#c8b89c"],["Brown","#775c49"],["Orange","#d2763d"],["Red","#b53b43"],["Yellow","#ddc75d"]];
-const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Times New Roman","Courier New","Verdana"];
+const FONTS=["Manrope","Inter","Poppins","Montserrat","DM Sans","Roboto","Space Grotesk","Playfair Display","Cormorant Garamond","Oswald","Bebas Neue","Anton","Dancing Script","Great Vibes","Pacifico","Caveat","Arial","Georgia","Verdana","Trebuchet MS","Impact","Courier New","Times New Roman"];
 
 let scene,camera,renderer,controls,caseRoot,artMesh,artCanvas,artCtx,artTexture,raf;
 let fsScene,fsCamera,fsRenderer,fsControls,fsCase,fsArt,fsRaf;
@@ -66,7 +66,7 @@ function makeArtPlane(texture){
   const m=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4});
   const p=new THREE.Mesh(g,m);
   // Exact master GLB: rear face is negative Z. Keep print below camera plateau.
-  p.position.set(0,-22,-7.58);p.rotation.y=Math.PI;p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
+  p.position.set(0,-22,7.58);p.renderOrder=20;p.name="CUSTOM_PRINT_SURFACE";
   return p;
 }
 async function loadMain(){
@@ -82,8 +82,8 @@ function lights(s){s.add(new THREE.HemisphereLight(0xffffff,0x93a6c0,2.5));let a
 function normalize(o){const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());o.position.sub(c);o.scale.setScalar(3.45/Math.max(sz.x,sz.y,sz.z))}
 function resizeMain(){if(!renderer)return;let r=$("#stage").getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
 function mainLoop(){controls?.update();renderer?.render(scene,camera);raf=requestAnimationFrame(mainLoop)}
-function zoomMain(f){if(camera){camera.position.multiplyScalar(f);controls?.update()}}
-function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,0,-5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId)setMode("edit")}
+function zoomMain(f){if(!camera)return;const dir=Math.sign(camera.position.z)||1;const z=Math.min(6.4,Math.max(3.75,Math.abs(camera.position.z)*f));camera.position.z=dir*z;controls?.update()}
+function backView(instant=true){if(!camera||!controls)return;camera.position.set(0,-.1,5.0);controls.target.set(0,-.25,0);controls.update();if(selectedId&&mode!=="edit")setMode("edit")}
 
 async function openFull(){
   if(!selectedId && !layers.length){toast("Add a photo or text first");return}
@@ -96,19 +96,19 @@ async function openFull(){
   // Replace cloned artwork material with same live texture.
   fsCase.traverse(o=>{if(o.name==="CUSTOM_PRINT_SURFACE"){fsArt=o;o.material=o.material.clone();o.material.map=artTexture;o.material.needsUpdate=true}});
   fsScene.add(fsCase);recolor(fsCase);
-  fsCamera.position.set(0,-.1,-4.65);
-  fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.target.set(0,-.28,0);fsControls.update();
+  fsCamera.position.set(0,-.1,4.65);
+  fsControls=new OrbitControls(fsCamera,fsRenderer.domElement);fsControls.enabled=false;fsControls.enableRotate=false;fsControls.enablePan=false;fsControls.enableZoom=false;fsControls.target.set(0,-.28,0);fsControls.update();
   resizeFull();fullLoop();attachDrag(fsRenderer.domElement,true);syncEditor();
 }
 function closeFull(){cancelAnimationFrame(fsRaf);fsControls?.dispose();fsRenderer?.dispose();fsScene=fsCamera=fsRenderer=fsControls=fsCase=fsArt=null;$("#fullEditor").classList.remove("open");document.body.style.overflow=""}
 function resizeFull(){if(!fsRenderer)return;let r=$("#fsStage").getBoundingClientRect();fsRenderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);fsCamera.aspect=r.width/r.height;fsCamera.updateProjectionMatrix()}
 function fullLoop(){fsRenderer?.render(fsScene,fsCamera);fsRaf=requestAnimationFrame(fullLoop)}
-function zoomFull(f){if(fsCamera)fsCamera.position.multiplyScalar(f)}
+function zoomFull(f){if(!fsCamera)return;fsCamera.position.z=Math.min(5.9,Math.max(3.55,Math.abs(fsCamera.position.z)*f));fsCamera.position.x=0;fsCamera.position.y=-.1;fsCamera.lookAt(0,-.28,0)}
 
-function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit")backView()}
+function setMode(m){mode=m;$("#rotateMode").classList.toggle("on",m==="rotate");$("#editMode").classList.toggle("on",m==="edit");if(controls)controls.enabled=m==="rotate";$("#viewerNote").textContent=m==="rotate"?"Drag to rotate • Pinch to zoom":"Drag selected design on the case • Full editor for precision";if(m==="edit"&&camera&&controls){camera.position.set(0,-.1,5.0);controls.target.set(0,-.25,0);controls.update()}}
 function attachDrag(el,full){
   el.addEventListener("pointerdown",e=>{if((!full&&mode!=="edit")||!selected())return;drag={sx:e.clientX,sy:e.clientY,x:selected().x,y:selected().y,full};el.setPointerCapture?.(e.pointerId)});
-  el.addEventListener("pointermove",e=>{if(!drag||drag.full!==full)return;let r=el.getBoundingClientRect(),l=selected();if(!l)return;l.x=drag.x-(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05;l.y=drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05;redraw()});
+  el.addEventListener("pointermove",e=>{if(!drag||drag.full!==full)return;let r=el.getBoundingClientRect(),l=selected();if(!l)return;l.x=Math.max(80,Math.min(820,drag.x+(e.clientX-drag.sx)*(artCanvas.width/r.width)*1.05));l.y=Math.max(100,Math.min(1250,drag.y+(e.clientY-drag.sy)*(artCanvas.height/r.height)*1.05));redraw()});
   const end=()=>drag=null;el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
 }
 
@@ -121,15 +121,18 @@ async function uploadPhoto(e){
   }catch(err){console.error(err);toast("Could not open this image")}
   e.target.value="";
 }
-function addText(){
+async function addText(){
   let text=$("#textInput").value.trim();if(!text){toast("Write your text first");return}
-  let l={id:id(),type:"text",name:text,text,font:$("#fontSelect").value,color:$("#textColor").value,x:450,y:675,scale:1,rotation:0};layers.push(l);$("#textInput").value="";$("#textForm").classList.remove("open");selectLayer(l.id);redraw();setMode("edit");backView();toast("Text added to the back")
+  const font=$("#fontSelect").value;
+  try{await document.fonts.load(`700 105px "${font}"`);await document.fonts.ready}catch(e){}
+  let l={id:id(),type:"text",name:text,text,font,color:$("#textColor").value,x:450,y:675,scale:1,rotation:0};
+  layers.push(l);$("#textInput").value="";$("#textForm").classList.remove("open");selectLayer(l.id);redraw();setMode("edit");toast("Text added — drag it directly on the back")
 }
 function redraw(){
   if(!artCtx)return;artCtx.clearRect(0,0,900,1350);
   for(let l of layers){artCtx.save();artCtx.translate(l.x,l.y);artCtx.rotate(l.rotation*Math.PI/180);
     if(l.type==="image"){let fit=Math.min(650/l.image.width,900/l.image.height),w=l.image.width*fit*l.scale,h=l.image.height*fit*l.scale;artCtx.drawImage(l.image,-w/2,-h/2,w,h)}
-    else{let size=105*l.scale;artCtx.font=`700 ${size}px "${l.font}"`;artCtx.textAlign="center";artCtx.textBaseline="middle";artCtx.fillStyle=l.color;artCtx.fillText(l.text,0,0,820)}
+    else{let size=145*l.scale;artCtx.font=`700 ${size}px "${l.font}"`;artCtx.textAlign="center";artCtx.textBaseline="middle";artCtx.fillStyle=l.color;artCtx.fillText(l.text,0,0,820)}
     artCtx.restore()}
   artTexture.needsUpdate=true;
 }
@@ -144,7 +147,7 @@ function syncEditor(){
 }
 function changeScale(v){let l=selected();if(!l)return;l.scale=v;$("#sizeRange").value=Math.round(v*100);$("#fsSize").value=Math.round(v*100);redraw()}
 function changeRotation(v){let l=selected();if(!l)return;l.rotation=v;$("#rotationRange").value=v;$("#fsRotate").value=v;redraw()}
-function moveSelected(dx,dy){let l=selected();if(!l)return;l.x+=dx;l.y+=dy;redraw()}
+function moveSelected(dx,dy){let l=selected();if(!l)return;l.x=Math.max(80,Math.min(820,l.x+dx));l.y=Math.max(100,Math.min(1250,l.y+dy));redraw()}
 function centerSelected(){let l=selected();if(!l)return;l.x=450;l.y=675;redraw()}
 function deleteSelected(){if(!selectedId)return;layers=layers.filter(l=>l.id!==selectedId);selectedId=layers.at(-1)?.id||null;redraw();renderLayers();syncEditor()}
 
@@ -160,4 +163,14 @@ window.addEventListener("keydown",e=>{
   if(e.key==="Escape"&&$("#fullEditor").classList.contains("open"))closeFull();
 });
 
-buildUI();createArtwork();renderLayers();loadMain();
+
+function preventBrowserZoom(){
+  const targets=[document.getElementById("stage"),document.getElementById("fsStage")].filter(Boolean);
+  for(const el of targets){
+    ["gesturestart","gesturechange","gestureend"].forEach(type=>el.addEventListener(type,e=>e.preventDefault(),{passive:false}));
+    let lastTouchEnd=0;
+    el.addEventListener("touchend",e=>{const now=Date.now();if(now-lastTouchEnd<=320)e.preventDefault();lastTouchEnd=now},{passive:false});
+  }
+}
+
+buildUI();createArtwork();renderLayers();loadMain();preventBrowserZoom();
