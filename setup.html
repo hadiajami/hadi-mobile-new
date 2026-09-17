@@ -9,17 +9,75 @@ header{height:70px;display:flex;align-items:center;justify-content:space-between
 main{width:min(1050px,100%);margin:auto;padding:18px 12px 35px}.intro{text-align:center;margin-bottom:16px}.intro b{font-size:.52rem;letter-spacing:.14em;color:#2b8cff}.intro h1{font-size:clamp(2rem,6vw,3.4rem);margin:5px 0}.intro p{font-size:.68rem;color:#7d8b9f;margin:0}.grid{display:grid;grid-template-columns:1.08fr .92fr;gap:18px;align-items:start}.viewer{height:620px;border:1px solid #dfe8f2;border-radius:26px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 35%,#fff,#eef7ff 58%,#f0efff);box-shadow:0 20px 60px rgba(24,60,110,.1)}#stage{position:absolute;inset:0}#stage canvas{width:100%!important;height:100%!important;display:block;touch-action:none}.loading{height:100%;display:grid;place-items:center;color:#7e8b9d;font-size:.65rem}.live{position:absolute;top:13px;left:13px;background:#0c2b59;color:#fff;padding:7px 9px;border-radius:999px;font-size:.47rem;font-weight:800}.viewerActions{position:absolute;right:13px;top:13px;display:flex;gap:6px}.viewerActions button,.viewbar button{border:0;border-radius:11px;background:rgba(255,255,255,.94);color:#0c2348;padding:9px 11px;font-size:.54rem;font-weight:800;box-shadow:0 5px 16px rgba(20,45,80,.08)}.viewerActions .design{background:#0c2b59;color:#fff}.viewbar{position:absolute;bottom:13px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:6px;border-radius:16px;background:rgba(255,255,255,.92)}.panel{display:grid;gap:10px}.card{background:#fff;border:1px solid #e4ebf2;border-radius:18px;padding:14px;box-shadow:0 8px 24px rgba(25,60,110,.05)}.card h3{font-size:.7rem;margin:0 0 3px}.card p{font-size:.52rem;color:#8390a2;margin:0 0 10px}.swatches{display:flex;gap:7px;flex-wrap:wrap}.sw{width:31px;height:31px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #d8e0e9}.sw.on{box-shadow:0 0 0 3px #2c8dff}.add{display:grid;grid-template-columns:1fr 1fr;gap:8px}.add label,.add button{min-height:70px;border:1px dashed #b9c7d7;border-radius:13px;background:#f8fbff;color:#0c2348;display:grid;place-items:center;text-align:center;font-size:.58rem;font-weight:800}.add input{display:none}.hint{margin-top:10px;padding:10px;border-radius:12px;background:#f3f8fd;font-size:.51rem;color:#718197;line-height:1.45}.bottom{position:fixed;left:50%;bottom:max(8px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(600px,calc(100% - 20px));display:grid;grid-template-columns:repeat(3,1fr);padding:7px;background:rgba(255,255,255,.94);border:1px solid #e0e7ef;border-radius:21px;z-index:40;box-shadow:0 10px 30px rgba(20,45,80,.12)}.bottom a{text-align:center;text-decoration:none;color:#8290a2;font-size:.52rem;padding:8px;border-radius:13px}.bottom .on{background:#f0f7ff;color:#278cff}
 .editor{position:fixed;left:0;top:0;width:100%;height:var(--vvh,100dvh);z-index:100;background:#eef6fc;display:none;flex-direction:column;overflow:hidden}.editor.open{display:flex}.ehead{height:64px;background:#fff;border-bottom:1px solid #e1e9f1;padding:9px 12px;display:flex;align-items:center;justify-content:space-between}.ehead strong{font-size:.72rem}.ehead small{display:block;color:#8491a3;font-size:.48rem}.ehead button{border:0;background:#0c2b59;color:#fff;border-radius:999px;padding:10px 14px;font-size:.56rem;font-weight:800}.workspace{position:relative;flex:1;min-height:0;display:grid;place-items:center;padding:10px 12px;overflow:hidden}.case2d{position:relative;height:100%;max-height:100%;max-width:100%;aspect-ratio:1000/2021;filter:drop-shadow(0 16px 30px rgba(20,45,80,.14));touch-action:none}.caseShell{position:absolute;inset:0;background-color:var(--case-color,#efefed);-webkit-mask:url("assets/img/iphone17_case_print_mask.png") center/100% 100% no-repeat;mask:url("assets/img/iphone17_case_print_mask.png") center/100% 100% no-repeat;pointer-events:none}.caseShell:after{content:"";position:absolute;inset:0;background:url("assets/img/iphone17_case_back_template.png") center/100% 100% no-repeat;mix-blend-mode:multiply;opacity:.20}.printCanvas{position:absolute;z-index:2;inset:0;width:100%;height:100%;touch-action:none}.cameraZone,.cameraHole{display:none}.safeLabel{display:none}.toolbar{position:relative;z-index:6;flex:0 0 auto;width:min(720px,calc(100% - 18px));margin:0 auto max(8px,env(safe-area-inset-bottom));background:rgba(255,255,255,.98);border:1px solid #dfe7ef;border-radius:18px;padding:9px;box-shadow:0 12px 34px rgba(20,45,80,.14)}.trow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.trow+.trow{margin-top:7px}.toolbar button{border:0;border-radius:10px;background:#eef3f8;color:#0c2348;padding:8px 10px;font-size:.52rem;font-weight:800}.toolbar .primary{background:#0c2b59;color:#fff}.toolbar label{flex:1 1 130px;font-size:.47rem;color:#687991;font-weight:700}.toolbar input[type=range]{width:100%;accent-color:#278cff}.toolbar input[type=text],.toolbar select{border:1px solid #dfe7ef;border-radius:9px;padding:8px;font-size:.53rem;min-width:0}.toolbar input[type=text]{flex:1 1 120px}.fontSel{flex:1 1 130px}.colorInput{width:38px;height:34px;border:1px solid #dfe7ef;border-radius:9px;padding:2px;background:#fff}.layers{font-size:.48rem;color:#7a899d;margin-left:auto}.toast{position:fixed;z-index:150;left:50%;bottom:100px;transform:translateX(-50%);background:#0c2b59;color:#fff;border-radius:999px;padding:8px 11px;font-size:.53rem;font-weight:800;opacity:0;transition:.2s;pointer-events:none}.toast.on{opacity:1}
 @media(max-width:780px){.grid{grid-template-columns:1fr}.viewer{height:520px}.intro h1{font-size:2.2rem}.toolbar{padding:8px}}@media(max-width:430px){.viewer{height:490px}.toolbar{padding:7px}.trow{gap:5px}.toolbar button{padding:7px 8px}}
+
+.final-card{padding:18px}.review-kicker{font-size:.48rem;letter-spacing:.13em;font-weight:800;color:#258cff}.final-card h3{font-size:.82rem;margin:6px 0 3px}.review-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:13px 0}.review-summary>div{padding:10px;border-radius:12px;background:#f6f9fc}.review-summary span{display:block;font-size:.45rem;color:#8794a5;margin-bottom:4px}.review-summary strong{font-size:.55rem;display:flex;align-items:center;gap:6px}.review-summary i{width:15px;height:15px;border-radius:50%;display:inline-block;border:1px solid #ccd5df}.review-edit,.review-cart{width:100%;border:0;border-radius:12px;padding:12px;font-weight:800;font-size:.58rem}.review-edit{background:#edf4fb;color:#0c2348;margin-bottom:7px}.review-cart{background:#0c2b59;color:#fff}.review-note{display:block;color:#8b97a8;font-size:.43rem;text-align:center;margin-top:8px}
+.editor-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px}.editor-tabs .tab{padding:8px 4px}.editor-tabs .tab.on{background:#0c2b59;color:#fff}.tabpane{display:none}.tabpane.on{display:block}.mini-title{display:flex;align-items:end;justify-content:space-between;margin:2px 2px 8px}.mini-title strong{font-size:.57rem}.mini-title span{font-size:.42rem;color:#8794a5}.editor-swatches{display:flex;gap:7px;overflow-x:auto;padding:4px 3px 7px;scrollbar-width:none}.editor-swatches::-webkit-scrollbar{display:none}.editor-swatches .sw{flex:0 0 30px}
+.compact-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.compact-row input[type=text]{flex:1;min-width:110px}.compact-ranges{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:7px}.compact-ranges label{font-size:.45rem!important}.font-preview,.effect-row{display:flex;gap:6px;overflow-x:auto;padding:7px 1px;scrollbar-width:none}.font-preview::-webkit-scrollbar,.effect-row::-webkit-scrollbar{display:none}.font-chip,.effect-row button{flex:0 0 auto;border:1px solid #dfe7ef!important;background:#f7f9fc!important;padding:8px 10px!important}.font-chip.on,.effect-row button.on{background:#0c2b59!important;color:#fff!important}.layer-list{display:flex;gap:6px;overflow-x:auto;padding:3px 0 7px}.layer-pill{flex:0 0 auto;border:1px solid #dfe7ef!important;background:#f7f9fc!important}.layer-pill.on{background:#0c2b59!important;color:#fff!important}.toolbar-footer{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:7px;border-top:1px solid #e8edf3}.toolbar-footer span{font-size:.43rem;color:#7d8a9c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.toolbar-footer .apply{flex:0 0 auto}
+.bottom-nav-match{height:68px;padding:7px 10px;width:min(680px,calc(100% - 20px));border-radius:22px}.bottom-nav-match a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:.52rem!important;padding:5px!important}.bottom-nav-match svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8}.bottom-nav-match span{display:block}
 </style></head><body>
 <header><a class="brand" href="index.html"><img src="assets/img/hadi-mobile-icon.jpg"><div><strong>HADI MOBILE</strong><small>CASE STUDIO</small></div></a><a class="back" href="index.html">← Back</a></header>
 <main><section class="intro"><b>CUSTOM CASE STUDIO</b><h1>Make it yours.</h1><p>Design on a precise flat back, then inspect your finished case in 3D.</p></section>
 <div class="grid"><div class="viewer"><div id="stage"><div class="loading">Loading 3D case…</div></div><span class="live">LIVE 3D</span><div class="viewerActions"><button id="backView">Back view</button><button class="design" id="editDesign">✦ Edit design</button></div><div class="viewbar"><button id="zout">−</button><button id="fit">Fit case</button><button id="zin">+</button></div></div>
-<div class="panel"><div class="card"><h3>Case color</h3><p>Choose your silicone case color.</p><div class="swatches" id="swatches"></div></div>
-<div class="card"><h3>Your design</h3><p>Add an image or text. Editing opens in a dedicated flat workspace.</p><div class="add"><label>＋ Add photo<input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><button id="addTextQuick">T Add text</button></div><div class="hint">The editor protects the camera area and case edges automatically. When finished, press <b>Apply to 3D</b>.</div></div></div></div></main>
+<div class="panel">
+<div class="card final-card">
+  <span class="review-kicker">YOUR CUSTOM CASE</span>
+  <h3>iPhone 17 Pro — Custom Silicone Case</h3>
+  <p>Inspect your finished design in 3D before ordering.</p>
+  <div class="review-summary">
+    <div><span>Case color</span><strong><i id="reviewColor"></i><b id="reviewColorName">White</b></strong></div>
+    <div><span>Design</span><strong id="reviewDesign">No artwork yet</strong></div>
+  </div>
+  <button class="review-edit" id="reviewEdit">✦ Edit design</button>
+  <button class="review-cart" id="caseAddCart">Add custom case to cart</button>
+  <small class="review-note">Your exact design preview is kept on this device until checkout.</small>
+</div></div></div></main>
 <section class="editor" id="editor"><div class="ehead"><div><strong>Design your case</strong><small>2D precision editor — no 3D movement while designing</small></div><button type="button" id="closeEditor">Done</button></div>
 <div class="workspace"><div class="case2d" id="case2d"><div class="caseShell"></div><canvas class="printCanvas" id="designCanvas" width="1000" height="2021"></canvas></div></div>
-<div class="toolbar"><div class="trow"><button type="button" id="addPhotoInside">＋ Photo</button><input id="photoInside" type="file" accept="image/jpeg,image/png,image/webp" hidden><button type="button" id="newText">＋ Text</button><button type="button" id="removeBg">Remove BG</button><button type="button" id="center">Center</button><button type="button" id="del">Delete</button><span class="layers" id="layerName">No layer selected</span></div>
-<div class="trow" id="textTools"><input id="textValue" type="text" placeholder="Your text"><select id="font" class="fontSel"></select><input id="textColor" class="colorInput" type="color" value="#111111"></div>
-<div class="trow"><label>SIZE / PINCH<input id="scale" type="range" min="10" max="400" value="100"></label><label>ROTATE<input id="rotation" type="range" min="-180" max="180" value="0"></label><button type="button" class="primary" id="apply3d">✓ Apply to 3D</button></div></div></section>
-<nav class="bottom"><a href="index.html">⌂<br>Home</a><a class="on" href="setup.html">▣<br>Customize</a><a href="categories.html">▦<br>Shop</a></nav><div class="toast" id="toast"></div>
+<div class="toolbar">
+  <div class="editor-tabs">
+    <button type="button" class="tab on" data-tab="case">Case</button>
+    <button type="button" class="tab" data-tab="text">Text</button>
+    <button type="button" class="tab" data-tab="photo">Photo</button>
+    <button type="button" class="tab" data-tab="layers">Layers</button>
+  </div>
+
+  <div class="tabpane on" id="pane-case">
+    <div class="mini-title"><strong>Case color</strong><span>Same color in 2D + 3D</span></div>
+    <div class="editor-swatches" id="editorSwatches"></div>
+  </div>
+
+  <div class="tabpane" id="pane-text">
+    <div class="compact-row"><button type="button" class="primary" id="newText">＋ Add text</button><input id="textValue" type="text" placeholder="Select or add text"><input id="textColor" class="colorInput" type="color" value="#111111"></div>
+    <div class="font-preview" id="fontPreview"></div>
+    <div class="compact-ranges"><label>SIZE / PINCH<input id="scale" type="range" min="10" max="400" value="100"></label><label>ROTATE<input id="rotation" type="range" min="-180" max="180" value="0"></label></div>
+    <div class="compact-row"><button type="button" id="center">Center</button><button type="button" id="del">Delete</button></div>
+    <select id="font" class="fontSel" hidden></select>
+  </div>
+
+  <div class="tabpane" id="pane-photo">
+    <div class="compact-row"><button type="button" class="primary" id="addPhotoInside">＋ Add / replace photo</button><input id="photoInside" type="file" accept="image/jpeg,image/png,image/webp" hidden><button type="button" id="removeBg">Remove BG</button></div>
+    <div class="effect-row" id="effectRow">
+      <button type="button" data-effect="original" class="on">Original</button>
+      <button type="button" data-effect="bw">B&W</button>
+      <button type="button" data-effect="vivid">Vivid</button>
+      <button type="button" data-effect="cartoon">Cartoon</button>
+      <button type="button" data-effect="outline">Outline</button>
+    </div>
+    <div class="compact-ranges"><label>SIZE / PINCH<input id="photoScale" type="range" min="10" max="400" value="100"></label><label>ROTATE<input id="photoRotation" type="range" min="-180" max="180" value="0"></label></div>
+    <div class="compact-row"><button type="button" id="photoCenter">Center</button><button type="button" id="photoDelete">Delete</button></div>
+  </div>
+
+  <div class="tabpane" id="pane-layers">
+    <div class="mini-title"><strong>Design layers</strong><span>Tap a layer to edit it</span></div>
+    <div class="layer-list" id="layerList"><span>No design added yet.</span></div>
+  </div>
+
+  <div class="toolbar-footer"><span id="layerName">No layer selected</span><button type="button" class="primary apply" id="apply3d">✓ Apply to 3D</button></div>
+</div></section>
+<nav class="bottom bottom-nav-match">
+<a href="index.html"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3Z"/></svg><span>Home</span></a>
+<a href="categories.html"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4Zm10 0h6v6h-6ZM4 14h6v6H4Zm10 0h6v6h-6Z"/></svg><span>Categories</span></a>
+<a href="index.html#cart"><svg viewBox="0 0 24 24"><path d="M3 3h2l2.2 11h9.8l2-7H7.1M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><span>Cart</span></a>
+</nav><div class="toast" id="toast"></div>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"}}</script>
-<script type="module" src="assets/js/setup.js?v=24.0"></script></body></html>
+<script type="module" src="assets/js/setup.js?v=25.0"></script></body></html>
