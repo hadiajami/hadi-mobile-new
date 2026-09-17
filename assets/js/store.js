@@ -383,7 +383,7 @@ function renderHomePromos(){
   section.innerHTML=`<div class="home-promo-track">${promos.map(pr=>`<article class="home-promo-card reveal"><img src="${pr.image_url}" alt="${esc(pr.title||"HADI MOBILE")}"><div class="home-promo-shade"></div><div class="home-promo-copy">${pr.show_title&&pr.title?`<h2>${esc(pr.title)}</h2>`:""}<button class="home-promo-btn" data-promo-product="${pr.product_id}">${esc(pr.button_text||"Shop now")}</button></div></article>`).join("")}</div>${promos.length>1?`<div class="home-promo-dots">${promos.map((_,i)=>`<button data-promo-dot="${i}" class="${i===0?"active":""}" aria-label="Promo ${i+1}"></button>`).join("")}</div>`:""}`;
   const track=section.querySelector(".home-promo-track");
   section.querySelectorAll("[data-promo-product]").forEach(b=>b.onclick=()=>openProduct(b.dataset.promoProduct,false));
-  section.querySelectorAll("[data-promo-dot]").forEach(b=>b.onclick=()=>track.children[Number(b.dataset.promoDot)]?.scrollIntoView({behavior:"smooth",block:"nearest",inline:"start"}));
+  section.querySelectorAll("[data-promo-dot]").forEach(b=>b.onclick=()=>track?.scrollTo({left:Number(b.dataset.promoDot)*track.clientWidth,behavior:"smooth"}));
   if(track&&promos.length>1){track.addEventListener("scroll",()=>{const i=Math.round(track.scrollLeft/Math.max(track.clientWidth,1));section.querySelectorAll("[data-promo-dot]").forEach((d,n)=>d.classList.toggle("active",n===i));},{passive:true});}
   observeReveals(section);
 }
@@ -485,7 +485,7 @@ function renderCart(){
     <img src="${i.image_url||"assets/img/hadi-mobile-logo.jpg"}" alt="">
     <div>
       <h4>${esc(i.name)}</h4>
-      ${i.phone_model?`<div class="cart-phone-model">${esc(i.phone_model)}</div>`:""}${i.color_name?`<div class="cart-phone-model">${esc(i.color_name)}</div>`:""}
+      ${i.phone_model?`<div class="cart-phone-model">${esc(i.phone_model)}</div>`:""}${i.color_name?`<div class="cart-phone-model">${esc(i.color_name)}</div>`:""}${i.custom_design_id?`<div class="cart-phone-model">Custom design ✓</div>`:""}
       <small>${money(i.price)}</small>
       <div class="qty"><button data-dec="${esc(i.key)}">−</button><span>${i.qty}</span><button data-inc="${esc(i.key)}">+</button></div>
     </div>
