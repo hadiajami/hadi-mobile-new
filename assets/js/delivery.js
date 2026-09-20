@@ -9,13 +9,7 @@
   const root=$("#checkoutRoot");
   const toast=msg=>{const t=$("#toast");if(!t)return;t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2400)};
 
-  function assetDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open("hadi_case_assets",1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("files"))r.result.createObjectStore("files")};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-  async function getOriginalAsset(id){const db=await assetDb();return new Promise((resolve,reject)=>{const tx=db.transaction("files","readonly"),r=tx.objectStore("files").get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)})}
-  function dataUrlBlob(url){const [head,data]=String(url||"").split(",");if(!data)return null;const mime=(head.match(/data:([^;]+)/)||[])[1]||"image/jpeg",bin=atob(data),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime})}
-  function safeFileName(n="image.jpg"){return n.replace(/[^a-zA-Z0-9._-]+/g,"-").slice(-100)||"image.jpg"}
-  async function uploadCaseBlob(blob,path){const r=await fetch(`${CFG.SUPABASE_URL}/storage/v1/object/custom-case-assets/${path}`,{method:"POST",headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`,"Content-Type":blob.type||"application/octet-stream","x-upsert":"false"},body:blob});if(!r.ok)throw new Error(await r.text());return `${CFG.SUPABASE_URL}/storage/v1/object/public/custom-case-assets/${path.split("/").map(encodeURIComponent).join("/")}`}
-  async function ensureCustomDesign(item){if(!item?.is_custom_case&&!item?.kind?.includes?.("custom_case"))return item;if(item.custom_design_id)return item;const token=`${Date.now()}-${crypto.randomUUID()}`,originals=[];for(const a of (item.original_asset_ids||[])){const blob=await getOriginalAsset(a.id);if(blob){const path=`${token}/original-${safeFileName(a.name||"photo.jpg")}`;originals.push({name:a.name||"Original photo",url:await uploadCaseBlob(blob,path),type:a.type||blob.type})}}let previewUrl=null;const pb=dataUrlBlob(item.custom_preview||item.image_url);if(pb)previewUrl=await uploadCaseBlob(pb,`${token}/final-preview.jpg`);const texts=item.custom_texts||item.custom_design?.layers?.filter(x=>x.type==="text").map(x=>({text:x.text,font:x.font,color:x.color,x:x.x,y:x.y,scale:x.s,rotation:x.r}))||[];const body={phone_model:item.phone_model||"iPhone 17 Pro",case_color:item.case_color||item.color_name||"",preview_url:previewUrl,original_files:originals,text_layers:texts,status:"pending"};const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/custom_case_designs`,{method:"POST",headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d?.message||JSON.stringify(d));item.custom_design_id=d[0]?.id||null;item.custom_preview_url=previewUrl;if(previewUrl)item.image_url=previewUrl;item.original_files=originals;item.custom_texts=texts;return item}
-  function customDetailsLines(i){const lines=[];if(i.custom_texts?.length)i.custom_texts.forEach((t,n)=>lines.push(`   Text ${n+1}: ${t.text}`));if(i.original_files?.length)i.original_files.forEach((f,n)=>lines.push(`   Original photo ${n+1}: ${f.url}`));if(i.custom_preview_url)lines.push(`   Final preview: ${i.custom_preview_url}`);return lines}
+  function customTextLines(i){const texts=i.custom_texts||[];return texts.map((t,n)=>`   Text ${n+1}: ${t.text||""}`)}
 
   if(!cart.length){
     root.innerHTML=`<div class="card empty-cart"><div style="font-size:2rem">🛍</div><h2>Your cart is empty.</h2><p>Add something you love, then come back here to arrange delivery.</p><a href="index.html">Continue shopping</a></div>`;
@@ -71,7 +65,8 @@
     cart.forEach((i,index)=>{
       lines.push(`${index+1}. ${i.name} ×${Number(i.qty||1)} — ${money(Number(i.price||0)*Number(i.qty||1))}`);
       if(i.phone_model)lines.push(`   Model: ${i.phone_model}`);
-      if(i.color_name)lines.push(`   Color: ${i.color_name}`);if(i.custom_design_id)lines.push(`   Custom design: ${i.custom_design_id}`);customDetailsLines(i).forEach(x=>lines.push(x));
+      if(i.color_name)lines.push(`   Color: ${i.color_name}`);
+      if(i.is_custom_case||i.kind==="custom_case")customTextLines(i).forEach(x=>lines.push(x));
     });
     lines.push(``,`💰 *Subtotal:* ${money(total)}`);
     lines.push(`💳 *Payment:* ${pay}`);
@@ -129,8 +124,6 @@
     btn.disabled=true;
     const original=btn.textContent;
     btn.textContent="Placing order…";
-
-    try{for(let n=0;n<cart.length;n++)cart[n]=await ensureCustomDesign(cart[n]);localStorage.setItem("hadi_cart",JSON.stringify(cart))}catch(e){console.error("Custom case upload failed",e);try{if(waWindow&&!waWindow.closed)waWindow.close()}catch{}toast("We couldn't upload the custom case files. Please try again.");btn.disabled=false;btn.textContent=original;return}
 
     const order={
       full_name:d.fullName,
