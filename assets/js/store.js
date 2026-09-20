@@ -167,35 +167,59 @@ function initHeroScrollAnimation(){
   const tagline=$("#deviceTagline")||$(".device-screen small");
   if(!hero||!device||!frame||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
 
-  [device,frame,brand,subBrand,tagline,island].filter(Boolean).forEach(el=>{
+  const animated=[device,frame,brand,subBrand,tagline,island].filter(Boolean);
+  animated.forEach(el=>{
     el.style.willChange="transform,opacity";
     el.style.backfaceVisibility="hidden";
     el.style.webkitBackfaceVisibility="hidden";
   });
 
-  let raf=0,lastProgress=-1;
-  function paint(){
-    raf=0;
+  let target=0,current=0,raf=0,running=false;
+
+  function readTarget(){
     const rect=hero.getBoundingClientRect();
-    if(rect.bottom<0||rect.top>innerHeight){return}
     const distance=Math.max(hero.offsetHeight*.72,1);
-    const progress=Math.max(0,Math.min(1,-rect.top/distance));
-    if(Math.abs(progress-lastProgress)<.002)return;
-    lastProgress=progress;
-
-    device.style.transform=`translate3d(0,${-58*progress}px,0) scale3d(${1-.065*progress},${1-.065*progress},1)`;
-    device.style.opacity=String(1-.08*progress);
-    frame.style.transform=`translate3d(0,${54-18*progress}px,0) rotateX(${9-3*progress}deg) rotateZ(${8-11*progress}deg)`;
-
-    if(brand){brand.style.transform=`translate3d(0,${-10*progress}px,0)`;brand.style.opacity=String(1-.12*progress)}
-    if(subBrand)subBrand.style.transform=`translate3d(0,${-4*progress}px,0) scale3d(${1+.035*progress},${1+.035*progress},1)`;
-    if(tagline){tagline.style.transform=`translate3d(0,${8*progress}px,0)`;tagline.style.opacity=String(1-.35*progress)}
-    if(island)island.style.transform=`scale3d(${1-.08*progress},1,1)`;
+    target=Math.max(0,Math.min(1,-rect.top/distance));
+    if(!running){
+      running=true;
+      raf=requestAnimationFrame(tick);
+    }
   }
-  function requestPaint(){if(!raf)raf=requestAnimationFrame(paint)}
-  addEventListener("scroll",requestPaint,{passive:true});
-  addEventListener("resize",()=>{lastProgress=-1;requestPaint()},{passive:true});
-  requestPaint();
+
+  function render(p){
+    const scale=1-.065*p;
+    device.style.transform=`translate3d(0,${-58*p}px,0) scale3d(${scale},${scale},1)`;
+    device.style.opacity=String(1-.08*p);
+    frame.style.transform=`translate3d(0,${54-18*p}px,0) rotateX(${9-3*p}deg) rotateZ(${8-11*p}deg)`;
+    if(brand){
+      brand.style.transform=`translate3d(0,${-10*p}px,0)`;
+      brand.style.opacity=String(1-.12*p);
+    }
+    if(subBrand)subBrand.style.transform=`translate3d(0,${-4*p}px,0) scale3d(${1+.035*p},${1+.035*p},1)`;
+    if(tagline){
+      tagline.style.transform=`translate3d(0,${8*p}px,0)`;
+      tagline.style.opacity=String(1-.35*p);
+    }
+    if(island)island.style.transform=`translateZ(0) scale3d(${1-.08*p},1,1)`;
+  }
+
+  function tick(){
+    const delta=target-current;
+    current += delta*.18;
+    if(Math.abs(delta)<.00035) current=target;
+    render(current);
+    if(current!==target){
+      raf=requestAnimationFrame(tick);
+    }else{
+      running=false;
+      raf=0;
+    }
+  }
+
+  addEventListener("scroll",readTarget,{passive:true});
+  addEventListener("resize",readTarget,{passive:true});
+  current=target=0;
+  readTarget();
 }
 function initCategoriesPage(){
   const params=new URLSearchParams(location.search);
