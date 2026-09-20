@@ -32,7 +32,13 @@ function choose(id){
  }
  renderLayers();renderFontPreview();syncEffectButtons();
 }
-async function addImage(file){if(!file)return;try{let img=await createImageBitmap(file),l={id:crypto.randomUUID(),type:"image",name:file.name,img,x:500,y:1180,s:1,r:0,effect:"original"};layers.push(l);choose(l.id);redraw();openEditor();showTab("photo");updateReview()}catch(e){console.error(e);toast("Could not open image")}}
+const CFG=window.HADI_CONFIG||{};let CASE_PRICES={text_price:5,image_price:10};
+function assetDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open("hadi_case_assets",1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("files"))r.result.createObjectStore("files")};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function saveOriginalAsset(id,file){const db=await assetDb();return new Promise((resolve,reject)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").put(file,id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
+async function loadCasePrices(){try{if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY)throw 0;const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/custom_case_settings?id=eq.1&select=text_price,image_price`,{headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`}});const d=await r.json();if(r.ok&&d[0])CASE_PRICES={text_price:Number(d[0].text_price??5),image_price:Number(d[0].image_price??10)}}catch{}updateCasePrice()}
+function currentCasePrice(){return layers.reduce((sum,l)=>sum+(l.type==="image"?CASE_PRICES.image_price:l.type==="text"?CASE_PRICES.text_price:0),0)}
+function updateCasePrice(){const p=currentCasePrice(),el=$("#casePrice");if(el){el.textContent=`$${p.toFixed(2)}`;el.dataset.casePrice=String(p)}}
+async function addImage(file){if(!file)return;try{let img=await createImageBitmap(file),assetId=crypto.randomUUID();await saveOriginalAsset(assetId,file);let l={id:crypto.randomUUID(),type:"image",name:file.name,img,assetId,originalName:file.name,originalType:file.type||"image/jpeg",x:500,y:1180,s:1,r:0,effect:"original"};layers.push(l);choose(l.id);redraw();openEditor();showTab("photo");updateReview();updateCasePrice()}catch(e){console.error(e);toast("Could not open image")}}
 async function addText(){try{await document.fonts.ready}catch(e){}let l={id:crypto.randomUUID(),type:"text",name:"Text",text:"Your text",font:"Manrope",color:"#111111",x:500,y:1180,s:1,r:0};layers.push(l);choose(l.id);redraw();openEditor();showTab("text");updateReview();$("#textValue").focus();$("#textValue").select()}
 function openEditor(){updateViewport();history.pushState({caseEditor:true},"");$("#editor").classList.add("open");document.body.style.overflow="hidden"}
 function closeEditor(){if(!$("#editor").classList.contains("open"))return;updateReview();$("#editor").classList.remove("open");document.body.style.overflow="";backView();toast("Design applied to 3D")}
@@ -69,7 +75,7 @@ function deleteLayer(){if(!selected)return;layers=layers.filter(l=>l.id!==select
 function renderLayers(){let box=$("#layerList");if(!box)return;box.innerHTML=layers.length?layers.map(l=>`<button type="button" class="layer-pill ${l.id===selected?"on":""}" data-layer="${l.id}">${l.type==="text"?"T":"▧"} ${l.type==="text"?(l.text||"Text"):l.name}</button>`).join(""):"<span>No design added yet.</span>";box.querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{choose(b.dataset.layer);showTab(active()?.type==="text"?"text":"photo")})}
 function renderFontPreview(){let box=$("#fontPreview");if(!box)return;let l=active(),cur=l?.type==="text"?l.font:"Manrope";box.innerHTML=FONTS.map(f=>`<button type="button" class="font-chip ${f===cur?"on":""}" data-font="${f}" style="font-family:'${f}'">${l?.type==="text"?(l.text||"Text"):"Aa"}</button>`).join("");box.querySelectorAll("[data-font]").forEach(b=>b.onclick=async()=>{let x=active();if(!x||x.type!=="text"){toast("Add or select text first");return}x.font=b.dataset.font;$("#font").value=x.font;try{await document.fonts.load(`700 145px "${x.font}"`)}catch{}redraw();renderFontPreview()})}
 function syncEffectButtons(){let l=active();document.querySelectorAll("[data-effect]").forEach(b=>b.classList.toggle("on",l?.type==="image"&&(l.effect||"original")===b.dataset.effect))}
-function updateReview(){let names={"#efefed":"White","#17181b":"Black","#565b62":"Gray","#293b5c":"Navy","#8db7d0":"Sky","#557ba9":"Blue","#d8a9b6":"Pink","#b66f7e":"Rose","#7a6995":"Purple","#a2ad94":"Sage","#55735e":"Green","#c7b99e":"Sand","#d17a42":"Orange","#b64249":"Red"};$("#reviewColor").style.background=color;$("#reviewColorName").textContent=names[color]||color;let photos=layers.filter(x=>x.type==="image").length,texts=layers.filter(x=>x.type==="text").length;$("#reviewDesign").textContent=!layers.length?"No artwork yet":[photos?`${photos} photo${photos>1?"s":""}`:"",texts?`${texts} text layer${texts>1?"s":""}`:""].filter(Boolean).join(" + ")}
+function updateReview(){updateCasePrice();let names={"#efefed":"White","#17181b":"Black","#565b62":"Gray","#293b5c":"Navy","#8db7d0":"Sky","#557ba9":"Blue","#d8a9b6":"Pink","#b66f7e":"Rose","#7a6995":"Purple","#a2ad94":"Sage","#55735e":"Green","#c7b99e":"Sand","#d17a42":"Orange","#b64249":"Red"};$("#reviewColor").style.background=color;$("#reviewColorName").textContent=names[color]||color;let photos=layers.filter(x=>x.type==="image").length,texts=layers.filter(x=>x.type==="text").length;$("#reviewDesign").textContent=!layers.length?"No artwork yet":[photos?`${photos} photo${photos>1?"s":""}`:"",texts?`${texts} text layer${texts>1?"s":""}`:""].filter(Boolean).join(" + ")}
 function saveCustomDraft(){
   try{
     const preview=cv.toDataURL("image/jpeg",.88);
@@ -80,7 +86,7 @@ function saveCustomDraft(){
       preview,
       layers:layers.map(l=>({
         type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",
-        x:l.x,y:l.y,s:l.s,r:l.r,effect:l.effect||"original"
+        x:l.x,y:l.y,s:l.s,r:l.r,effect:l.effect||"original",asset_id:l.assetId||null,original_name:l.originalName||null,original_type:l.originalType||null
       })),
       updated_at:new Date().toISOString()
     };
@@ -88,26 +94,8 @@ function saveCustomDraft(){
     // Keep the editable draft exactly as before.
     localStorage.setItem("hadi_custom_case_draft",JSON.stringify(draft));
 
-    // Read the case price already shown/configured by the page.
-    const priceEl=$("#casePrice")||$("#reviewPrice")||document.querySelector("[data-case-price]");
-    const rawPrice=priceEl?.dataset?.casePrice||priceEl?.textContent||"";
-    const match=String(rawPrice).replace(/,/g,"").match(/\d+(?:\.\d+)?/);
-    let price=match?Number(match[0]):NaN;
-
-    // Optional safe fallbacks if the site stores/configures the price elsewhere.
-    if(!Number.isFinite(price)){
-      const saved=Number(localStorage.getItem("hadi_custom_case_price"));
-      if(Number.isFinite(saved)&&saved>=0)price=saved;
-    }
-    if(!Number.isFinite(price)){
-      const configured=Number(window.HADI_CONFIG?.CUSTOM_CASE_PRICE);
-      if(Number.isFinite(configured)&&configured>=0)price=configured;
-    }
-
-    if(!Number.isFinite(price)){
-      toast("Case price is still loading — try again in a moment");
-      return;
-    }
+    const price=currentCasePrice();
+    if(!layers.length){toast("Add a photo or text first");return;}
 
     let cart=[];
     try{
@@ -130,6 +118,8 @@ function saveCustomDraft(){
       image_url:preview,
       custom_preview:preview,
       custom_design:draft,
+      custom_texts:layers.filter(l=>l.type==="text").map(l=>({text:l.text||"",font:l.font||"Manrope",color:l.color||"#111111",x:l.x,y:l.y,scale:l.s,rotation:l.r})),
+      original_asset_ids:layers.filter(l=>l.type==="image"&&l.assetId).map(l=>({id:l.assetId,name:l.originalName,type:l.originalType})),
       qty:1
     });
 
@@ -160,3 +150,5 @@ function updateViewport(){const h=window.visualViewport?.height||window.innerHei
 window.visualViewport?.addEventListener("resize",updateViewport);window.visualViewport?.addEventListener("scroll",updateViewport);window.addEventListener("orientationchange",()=>setTimeout(updateViewport,120));updateViewport();
 maskImg=new Image();maskImg.onload=()=>redraw();maskImg.src=MASK_SRC;
 setupUI();redraw();init3d().catch(e=>{console.error(e);$("#stage").innerHTML='<div class="loading">Could not load 3D case.</div>'});window.addEventListener("resize",resize);
+
+loadCasePrices();
