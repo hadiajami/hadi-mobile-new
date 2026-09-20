@@ -16,16 +16,16 @@
   <section class="admin-title"><span class="eyebrow">CONTROL CENTER</span><h1>Store Manager</h1><p>Edit the shop without touching code.</p></section>
   <div class="stats" id="stats"></div>
   <div class="tabs">
-    <button class="tab active" data-tab="orders">Orders</button>
+    <button class="tab active" data-tab="homepage">Homepage</button>
+    <button class="tab" data-tab="orders">Orders</button>
     <button class="tab" data-tab="products">Products</button>
-    <button class="tab" data-tab="homepage">Homepage</button>
     <button class="tab" data-tab="categories">Categories</button>
     <button class="tab" data-tab="brands">Brands</button>
     <button class="tab" data-tab="setup">Case Studio</button>
     <button class="tab" data-tab="requests">Requests</button>
   </div>
 
-  <section id="ordersTab" class="tab-panel">
+  <section id="ordersTab" class="tab-panel hidden">
     <div class="panel-head"><div><h2>Orders</h2><p>All website checkout orders, payment status and delivery details.</p></div></div>
     <div class="admin-list" id="orderList"></div>
   </section>
@@ -35,7 +35,7 @@
     <div class="admin-list" id="productList"></div>
   </section>
 
-  <section id="homepageTab" class="tab-panel hidden">
+  <section id="homepageTab" class="tab-panel">
     <div class="panel-head"><div><h2>Homepage</h2><p>Control what customers see on the home page.</p></div></div>
 
     <div class="admin-subsection">
@@ -74,8 +74,11 @@
     </div>
     <div class="admin-subsection">
       <div class="admin-subsection-head"><div><strong>Custom case pricing</strong><small>Set the price charged for each text layer and each uploaded photo.</small></div></div>
-      <div class="two"><label>Price per text (USD)<input id="customCaseTextPrice" type="number" min="0" step="0.01" value="5"></label><label>Price per image (USD)<input id="customCaseImagePrice" type="number" min="0" step="0.01" value="10"></label></div>
-      <button class="gold-btn" id="saveCustomCasePrices" type="button">Save custom case prices</button>
+      <div class="case-pricing-grid">
+        <label class="case-price-field"><span>Price per text (USD)</span><input id="customCaseTextPrice" type="number" min="0" step="0.01" inputmode="decimal" value="5"></label>
+        <label class="case-price-field"><span>Price per image (USD)</span><input id="customCaseImagePrice" type="number" min="0" step="0.01" inputmode="decimal" value="10"></label>
+      </div>
+      <button class="gold-btn case-price-save" id="saveCustomCasePrices" type="button">Save custom case prices</button>
     </div>
     <div class="admin-subsection">
       <div class="admin-subsection-head"><div><strong>Customer custom-case files</strong><small>Final previews, original high-quality photos and the exact text entered by customers.</small></div></div>
@@ -204,6 +207,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/config.js"></script>
-<script src="../assets/js/admin.js?v=28.0"></script>
+<script src="../assets/js/admin.js?v=29.0"></script>
 </body>
 </html>
