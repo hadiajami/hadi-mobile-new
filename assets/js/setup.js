@@ -32,14 +32,54 @@ function choose(id){
  }
  renderLayers();renderFontPreview();syncEffectButtons();
 }
-const CFG=window.HADI_CONFIG||{};let CASE_PRICES={text_price:5,image_price:10};
-function assetDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open("hadi_case_assets",1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("files"))r.result.createObjectStore("files")};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function saveOriginalAsset(id,file){const db=await assetDb();return new Promise((resolve,reject)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").put(file,id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
-async function loadCasePrices(){try{if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY)throw 0;const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/custom_case_settings?id=eq.1&select=text_price,image_price`,{headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`}});const d=await r.json();if(r.ok&&d[0])CASE_PRICES={text_price:Number(d[0].text_price??5),image_price:Number(d[0].image_price??10)}}catch{}updateCasePrice()}
+const CFG=window.HADI_CONFIG||{};
+let CASE_PRICES={text_price:5,image_price:10};
+function safeFileName(n="image.jpg"){return String(n||"image.jpg").replace(/[^a-zA-Z0-9._-]+/g,"-").slice(-100)||"image.jpg"}
+async function loadCasePrices(){
+ try{
+  if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY)throw new Error("Missing config");
+  const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/custom_case_settings?id=eq.1&select=text_price,image_price`,{headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`}});
+  const d=await r.json();
+  if(r.ok&&d[0])CASE_PRICES={text_price:Number(d[0].text_price??5),image_price:Number(d[0].image_price??10)};
+ }catch(e){console.warn("Using default custom case prices",e)}
+ updateCasePrice();
+}
 function currentCasePrice(){return layers.reduce((sum,l)=>sum+(l.type==="image"?CASE_PRICES.image_price:l.type==="text"?CASE_PRICES.text_price:0),0)}
-function updateCasePrice(){const p=currentCasePrice(),el=$("#casePrice");if(el){el.textContent=`$${p.toFixed(2)}`;el.dataset.casePrice=String(p)}}
-async function addImage(file){if(!file)return;try{let img=await createImageBitmap(file),assetId=crypto.randomUUID();await saveOriginalAsset(assetId,file);let l={id:crypto.randomUUID(),type:"image",name:file.name,img,assetId,originalName:file.name,originalType:file.type||"image/jpeg",x:500,y:1180,s:1,r:0,effect:"original"};layers.push(l);choose(l.id);redraw();openEditor();showTab("photo");updateReview();updateCasePrice()}catch(e){console.error(e);toast("Could not open image")}}
-async function addText(){try{await document.fonts.ready}catch(e){}let l={id:crypto.randomUUID(),type:"text",name:"Text",text:"Your text",font:"Manrope",color:"#111111",x:500,y:1180,s:1,r:0};layers.push(l);choose(l.id);redraw();openEditor();showTab("text");updateReview();$("#textValue").focus();$("#textValue").select()}
+function updateCasePrice(){const el=$("#casePrice");if(el){const p=currentCasePrice();el.textContent=`$${p.toFixed(2)}`;el.dataset.casePrice=String(p)}}
+async function uploadCaseBlob(blob,path){
+ if(!CFG.SUPABASE_URL||!CFG.SUPABASE_ANON_KEY)throw new Error("Supabase is not configured");
+ const r=await fetch(`${CFG.SUPABASE_URL}/storage/v1/object/custom-case-assets/${path}`,{method:"POST",headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`,"Content-Type":blob.type||"application/octet-stream","x-upsert":"false"},body:blob});
+ if(!r.ok)throw new Error(await r.text());
+ return `${CFG.SUPABASE_URL}/storage/v1/object/public/custom-case-assets/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+function loadImage(src){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=src})}
+async function canvasBlob(){
+ const out=document.createElement("canvas");out.width=1000;out.height=2021;const o=out.getContext("2d");
+ o.fillStyle="#f7f9fc";o.fillRect(0,0,out.width,out.height);
+ const shell=document.createElement("canvas");shell.width=1000;shell.height=2021;const sc=shell.getContext("2d");sc.fillStyle=color;sc.fillRect(0,0,1000,2021);
+ if(maskImg&&maskImg.complete){sc.globalCompositeOperation="destination-in";sc.drawImage(maskImg,0,0,1000,2021);sc.globalCompositeOperation="source-over"}
+ o.drawImage(shell,0,0);o.drawImage(cv,0,0);
+ try{const tpl=await loadImage("assets/img/iphone17_case_back_template.png");o.save();o.globalAlpha=.20;o.globalCompositeOperation="multiply";o.drawImage(tpl,0,0,1000,2021);o.restore()}catch{}
+ return await new Promise((resolve,reject)=>out.toBlob(b=>b?resolve(b):reject(new Error("Could not create preview")),"image/jpeg",.94));
+}
+async function createCustomDesignRecord(){
+ const designId=crypto.randomUUID(),token=`${Date.now()}-${designId}`,originals=[];
+ for(const l of layers.filter(x=>x.type==="image")){
+  if(!l.originalFile)throw new Error(`Missing original file for ${l.name||"photo"}`);
+  const path=`${token}/original-${l.id}-${safeFileName(l.originalFile.name||l.name||"photo.jpg")}`;
+  const url=await uploadCaseBlob(l.originalFile,path);
+  originals.push({name:l.originalFile.name||l.name||"Original photo",url,type:l.originalFile.type||"application/octet-stream",layer_id:l.id});
+ }
+ const previewBlob=await canvasBlob();
+ const previewUrl=await uploadCaseBlob(previewBlob,`${token}/final-2d-rear-preview.jpg`);
+ const texts=layers.filter(l=>l.type==="text").map(l=>({text:l.text||"",font:l.font||"Manrope",color:l.color||"#111111",x:l.x,y:l.y,scale:l.s,rotation:l.r}));
+ const body={id:designId,phone_model:"iPhone 17 Pro",case_color:color,preview_url:previewUrl,original_files:originals,text_layers:texts,status:"pending"};
+ const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/custom_case_designs`,{method:"POST",headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)});
+ if(!r.ok)throw new Error(await r.text());
+ return {designId,previewUrl,originals,texts};
+}
+async function addImage(file){if(!file)return;try{let img=await createImageBitmap(file),l={id:crypto.randomUUID(),type:"image",name:file.name,img,originalFile:file,x:500,y:1180,s:1,r:0,effect:"original"};layers.push(l);choose(l.id);redraw();openEditor();showTab("photo");updateReview()}catch(e){console.error(e);toast("Could not open image")}}
+async function addText(){try{await document.fonts.ready}catch(e){}let l={id:crypto.randomUUID(),type:"text",name:"Text",text:"Your text",font:"Manrope",color:"#111111",x:500,y:1180,s:1,r:0};layers.push(l);choose(l.id);redraw();openEditor();showTab("text");updateReview();updateCasePrice();$("#textValue").focus();$("#textValue").select()}
 function openEditor(){updateViewport();history.pushState({caseEditor:true},"");$("#editor").classList.add("open");document.body.style.overflow="hidden"}
 function closeEditor(){if(!$("#editor").classList.contains("open"))return;updateReview();$("#editor").classList.remove("open");document.body.style.overflow="";backView();toast("Design applied to 3D")}
 function backView(){camera.position.set(0,-.1,-6.1);controls.target.set(0,-.2,0);camera.lookAt(controls.target);controls.update()}
@@ -76,63 +116,21 @@ function renderLayers(){let box=$("#layerList");if(!box)return;box.innerHTML=lay
 function renderFontPreview(){let box=$("#fontPreview");if(!box)return;let l=active(),cur=l?.type==="text"?l.font:"Manrope";box.innerHTML=FONTS.map(f=>`<button type="button" class="font-chip ${f===cur?"on":""}" data-font="${f}" style="font-family:'${f}'">${l?.type==="text"?(l.text||"Text"):"Aa"}</button>`).join("");box.querySelectorAll("[data-font]").forEach(b=>b.onclick=async()=>{let x=active();if(!x||x.type!=="text"){toast("Add or select text first");return}x.font=b.dataset.font;$("#font").value=x.font;try{await document.fonts.load(`700 145px "${x.font}"`)}catch{}redraw();renderFontPreview()})}
 function syncEffectButtons(){let l=active();document.querySelectorAll("[data-effect]").forEach(b=>b.classList.toggle("on",l?.type==="image"&&(l.effect||"original")===b.dataset.effect))}
 function updateReview(){updateCasePrice();let names={"#efefed":"White","#17181b":"Black","#565b62":"Gray","#293b5c":"Navy","#8db7d0":"Sky","#557ba9":"Blue","#d8a9b6":"Pink","#b66f7e":"Rose","#7a6995":"Purple","#a2ad94":"Sage","#55735e":"Green","#c7b99e":"Sand","#d17a42":"Orange","#b64249":"Red"};$("#reviewColor").style.background=color;$("#reviewColorName").textContent=names[color]||color;let photos=layers.filter(x=>x.type==="image").length,texts=layers.filter(x=>x.type==="text").length;$("#reviewDesign").textContent=!layers.length?"No artwork yet":[photos?`${photos} photo${photos>1?"s":""}`:"",texts?`${texts} text layer${texts>1?"s":""}`:""].filter(Boolean).join(" + ")}
-function saveCustomDraft(){
-  try{
-    const preview=cv.toDataURL("image/jpeg",.88);
-    const draft={
-      kind:"custom_case",
-      phone_model:"iPhone 17 Pro",
-      case_color:color,
-      preview,
-      layers:layers.map(l=>({
-        type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",
-        x:l.x,y:l.y,s:l.s,r:l.r,effect:l.effect||"original",asset_id:l.assetId||null,original_name:l.originalName||null,original_type:l.originalType||null
-      })),
-      updated_at:new Date().toISOString()
-    };
-
-    // Keep the editable draft exactly as before.
-    localStorage.setItem("hadi_custom_case_draft",JSON.stringify(draft));
-
-    const price=currentCasePrice();
-    if(!layers.length){toast("Add a photo or text first");return;}
-
-    let cart=[];
-    try{
-      const parsed=JSON.parse(localStorage.getItem("hadi_cart")||"[]");
-      cart=Array.isArray(parsed)?parsed:[];
-    }catch(e){cart=[]}
-
-    // Every finished custom design is its own cart line.
-    const designId="custom-case-"+Date.now();
-    cart.push({
-      key:designId,
-      id:designId,
-      kind:"custom_case",
-      is_custom_case:true,
-      name:"iPhone 17 Pro — Custom Silicone Case",
-      phone_model:"iPhone 17 Pro",
-      color_name:$("#reviewColorName")?.textContent?.trim()||color,
-      case_color:color,
-      price:Number(price),
-      image_url:preview,
-      custom_preview:preview,
-      custom_design:draft,
-      custom_texts:layers.filter(l=>l.type==="text").map(l=>({text:l.text||"",font:l.font||"Manrope",color:l.color||"#111111",x:l.x,y:l.y,scale:l.s,rotation:l.r})),
-      original_asset_ids:layers.filter(l=>l.type==="image"&&l.assetId).map(l=>({id:l.assetId,name:l.originalName,type:l.originalType})),
-      qty:1
-    });
-
-    localStorage.setItem("hadi_cart",JSON.stringify(cart));
-    window.dispatchEvent(new Event("storage"));
-    toast("Custom case added to cart ✓");
-
-    // Send the customer to the real cart after the item is safely stored.
-    setTimeout(()=>{window.location.href="index.html?openCart=1"},550);
-  }catch(e){
-    console.error("Custom case cart error:",e);
-    toast("Could not add custom case to cart");
-  }
+async function saveCustomDraft(){
+ if(!layers.length){toast("Add a photo or text first");return}
+ const btn=$("#caseAddCart"),old=btn?.textContent;
+ if(btn){btn.disabled=true;btn.textContent="Saving your design…"}
+ try{
+  const {designId,previewUrl,originals,texts}=await createCustomDesignRecord();
+  const draft={kind:"custom_case",phone_model:"iPhone 17 Pro",case_color:color,preview_url:previewUrl,layers:layers.map(l=>({type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",x:l.x,y:l.y,s:l.s,r:l.r,effect:l.effect||"original"})),updated_at:new Date().toISOString()};
+  localStorage.setItem("hadi_custom_case_draft",JSON.stringify(draft));
+  let cart=[];try{const parsed=JSON.parse(localStorage.getItem("hadi_cart")||"[]");cart=Array.isArray(parsed)?parsed:[]}catch{}
+  const key=`custom-case-${designId}`;
+  cart.push({key,id:key,kind:"custom_case",is_custom_case:true,name:"iPhone 17 Pro — Custom Silicone Case",phone_model:"iPhone 17 Pro",color_name:$("#reviewColorName")?.textContent?.trim()||color,case_color:color,price:Number(currentCasePrice()),image_url:previewUrl,custom_preview_url:previewUrl,custom_design_id:designId,original_files:originals,custom_texts:texts,qty:1});
+  localStorage.setItem("hadi_cart",JSON.stringify(cart));
+  toast("Custom case added to cart ✓");
+  setTimeout(()=>{window.location.href="index.html?openCart=1"},450);
+ }catch(e){console.error("Custom case save failed",e);toast("Could not save the custom case. Please try again.");if(btn){btn.disabled=false;btn.textContent=old||"Add custom case to cart"}}
 }
 function recolor(){if(!root)return;let c=new THREE.Color(color);root.traverse(o=>{if(!o.isMesh||o===printMesh)return;let a=Array.isArray(o.material)?o.material:[o.material];let n=a.map(m=>{m=m.clone();if(m.color)m.color.copy(c);m.roughness=.78;return m});o.material=Array.isArray(o.material)?n:n[0]})}
 async function init3d(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(31,1,.01,100);renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;$("#stage").innerHTML="";$("#stage").appendChild(renderer.domElement);scene.add(new THREE.HemisphereLight(0xffffff,0x94a5bb,2.6));let d=new THREE.DirectionalLight(0xffffff,3);d.position.set(4,6,7);scene.add(d);
