@@ -72,6 +72,15 @@
       <div class="admin-subsection-head"><div><strong>Case models</strong><small>Each case is tied to a phone model. Upload the finished GLB that customers will customize.</small></div><button class="gold-btn" id="newSetupDevice">+ Add case</button></div>
       <div class="admin-list" id="setupDeviceList"></div>
     </div>
+    <div class="admin-subsection">
+      <div class="admin-subsection-head"><div><strong>Custom case pricing</strong><small>Set the price charged for each text layer and each uploaded photo.</small></div></div>
+      <div class="two"><label>Price per text (USD)<input id="customCaseTextPrice" type="number" min="0" step="0.01" value="5"></label><label>Price per image (USD)<input id="customCaseImagePrice" type="number" min="0" step="0.01" value="10"></label></div>
+      <button class="gold-btn" id="saveCustomCasePrices" type="button">Save custom case prices</button>
+    </div>
+    <div class="admin-subsection">
+      <div class="admin-subsection-head"><div><strong>Customer custom-case files</strong><small>Final previews, original high-quality photos and the exact text entered by customers.</small></div></div>
+      <div class="admin-list" id="customCaseDesignList"></div>
+    </div>
   </section>
 
   <section id="requestsTab" class="tab-panel hidden">
@@ -195,6 +204,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/config.js"></script>
-<script src="../assets/js/admin.js"></script>
+<script src="../assets/js/admin.js?v=28.0"></script>
 </body>
 </html>
