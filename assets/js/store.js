@@ -18,14 +18,7 @@ const money=n=>`$${Number(n).toFixed(2)}`;
 const catName=id=>categories.find(c=>String(c.id)===String(id))?.name||"Tech";
 const esc=(s="")=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 
-function assetDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open("hadi_case_assets",1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains("files"))r.result.createObjectStore("files")};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function getOriginalAsset(id){const db=await assetDb();return new Promise((resolve,reject)=>{const tx=db.transaction("files","readonly"),r=tx.objectStore("files").get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)})}
-function dataUrlBlob(url){const [head,data]=String(url||"").split(",");if(!data)return null;const mime=(head.match(/data:([^;]+)/)||[])[1]||"image/jpeg",bin=atob(data),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime})}
-function safeFileName(n="image.jpg"){return n.replace(/[^a-zA-Z0-9._-]+/g,"-").slice(-100)||"image.jpg"}
-async function uploadCaseBlob(blob,path){const r=await fetch(`${CFG.SUPABASE_URL}/storage/v1/object/custom-case-assets/${path}`,{method:"POST",headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`,"Content-Type":blob.type||"application/octet-stream","x-upsert":"false"},body:blob});if(!r.ok)throw new Error(await r.text());return `${CFG.SUPABASE_URL}/storage/v1/object/public/custom-case-assets/${path.split("/").map(encodeURIComponent).join("/")}`}
-async function ensureCustomDesign(item){if(!item?.is_custom_case&&!item?.kind?.includes?.("custom_case"))return item;if(item.custom_design_id)return item;const token=`${Date.now()}-${crypto.randomUUID()}`,originals=[];for(const a of (item.original_asset_ids||[])){const blob=await getOriginalAsset(a.id);if(blob){const path=`${token}/original-${safeFileName(a.name||"photo.jpg")}`;originals.push({name:a.name||"Original photo",url:await uploadCaseBlob(blob,path),type:a.type||blob.type})}}let previewUrl=null;const pb=dataUrlBlob(item.custom_preview||item.image_url);if(pb)previewUrl=await uploadCaseBlob(pb,`${token}/final-preview.jpg`);const texts=item.custom_texts||item.custom_design?.layers?.filter(x=>x.type==="text").map(x=>({text:x.text,font:x.font,color:x.color,x:x.x,y:x.y,scale:x.s,rotation:x.r}))||[];const body={phone_model:item.phone_model||"iPhone 17 Pro",case_color:item.case_color||item.color_name||"",preview_url:previewUrl,original_files:originals,text_layers:texts,status:"pending"};const r=await fetch(`${CFG.SUPABASE_URL}/rest/v1/custom_case_designs`,{method:"POST",headers:{apikey:CFG.SUPABASE_ANON_KEY,Authorization:`Bearer ${CFG.SUPABASE_ANON_KEY}`,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d?.message||JSON.stringify(d));item.custom_design_id=d[0]?.id||null;item.custom_preview_url=previewUrl;if(previewUrl)item.image_url=previewUrl;item.original_files=originals;item.custom_texts=texts;return item}
-function customDetailsLines(i){const lines=[];if(i.custom_texts?.length)i.custom_texts.forEach((t,n)=>lines.push(`   Text ${n+1}: ${t.text}`));if(i.original_files?.length)i.original_files.forEach((f,n)=>lines.push(`   Original photo ${n+1}: ${f.url}`));if(i.custom_preview_url)lines.push(`   Final preview: ${i.custom_preview_url}`);return lines}
-
+function customTextLines(i){const texts=i.custom_texts||[];return texts.map((t,n)=>`   Text ${n+1}: ${t.text||""}`)}
 
 injectStoreEnhancementStyles();
 fixWhatsAppIcon();
@@ -590,16 +583,15 @@ function closeProduct(){
   $("#productModal")?.classList.remove("open");
   $("#productModal")?.setAttribute("aria-hidden","true");
 }
-async function checkout(){
+function checkout(){
   if(!cart.length)return;
-  const btn=$("#whatsappCheckout"),old=btn?.innerHTML;if(btn){btn.disabled=true;btn.textContent="Preparing custom files…"}
-  try{
-    for(let n=0;n<cart.length;n++)cart[n]=await ensureCustomDesign(cart[n]);
-    localStorage.setItem("hadi_cart",JSON.stringify(cart));
-    const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
-    const lines=[];
-    cart.forEach((i,n)=>{lines.push(`${n+1}. ${i.name}${i.phone_model?` — ${i.phone_model}`:""}${i.color_name?` — ${i.color_name}`:""} × ${i.qty} — ${money(i.price*i.qty)}`);customDetailsLines(i).forEach(x=>lines.push(x))});
-    const msg=`Hello HADI MOBILE 👋
+  const total=cart.reduce((s,i)=>s+Number(i.price||0)*Number(i.qty||1),0);
+  const lines=[];
+  cart.forEach((i,n)=>{
+    lines.push(`${n+1}. ${i.name}${i.phone_model?` — ${i.phone_model}`:""}${i.color_name?` — ${i.color_name}`:""} × ${i.qty} — ${money(Number(i.price||0)*Number(i.qty||1))}`);
+    if(i.is_custom_case||i.kind==="custom_case")customTextLines(i).forEach(x=>lines.push(x));
+  });
+  const msg=`Hello HADI MOBILE 👋
 
 I'd like to place this order:
 
@@ -608,9 +600,7 @@ ${lines.join("\n")}
 Total: ${money(total)}
 
 Please confirm availability and continue the order with me here.`;
-    window.open(`https://wa.me/${CFG.WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`,"_blank");
-  }catch(e){console.error(e);alert("We couldn't prepare the custom case files. Please try again.")}
-  finally{if(btn){btn.disabled=false;btn.innerHTML=old}}
+  window.open(`https://wa.me/${CFG.WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 
 $("#cartButton")?.addEventListener("click",openCart);
@@ -620,6 +610,7 @@ $("#sheetBackdrop")?.addEventListener("click",closeCart);
 $("#whatsappCheckout")?.addEventListener("click",checkout);
 $("#closeProduct")?.addEventListener("click",closeProduct);
 $("#productModal")?.addEventListener("click",e=>{if(e.target===$("#productModal"))closeProduct();});
+if(new URLSearchParams(location.search).get("openCart")==="1")setTimeout(openCart,80);
 
 let revealObserver=null;
 function initRevealAnimations(){
