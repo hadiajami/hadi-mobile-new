@@ -11,6 +11,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/store.css">
+
+  <style>
+    .hero-actions{display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:nowrap!important}
+    .hero-actions>a{margin:0!important;white-space:nowrap}
+    .hero-case-btn{position:relative;overflow:hidden;border:1px solid rgba(91,77,255,.2)!important;background:linear-gradient(110deg,#ffffff 0%,#f5f2ff 52%,#eefaff 100%)!important;box-shadow:0 12px 30px rgba(67,89,220,.13)!important;color:#102b59!important}
+    .hero-case-btn:after{content:"";position:absolute;inset:-70% -30%;background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.9) 50%,transparent 62%);transform:translateX(-70%);animation:heroCaseShine 4.2s ease-in-out infinite}
+    .hero-case-btn span{position:relative;z-index:1}.hero-case-spark{color:#6952ff;margin-right:5px}
+    @keyframes heroCaseShine{0%,62%{transform:translateX(-75%)}82%,100%{transform:translateX(75%)}}
+    @media(max-width:700px){.hero-actions{width:100%!important;gap:8px!important}.hero-actions>a{flex:1 1 0!important;min-width:0!important;padding:13px 10px!important;font-size:.66rem!important;text-align:center!important;justify-content:center!important}.hero-case-spark{margin-right:3px}}
+  </style>
 </head>
 <body data-page="home">
   <div class="top-glow"></div>
@@ -41,7 +51,7 @@
         <h1>Your tech world. <span>All in one place.</span></h1>
         <p>Phones, accessories and smart essentials — a brighter, faster and simpler way to shop tech.</p>
         <div class="hero-actions">
-          <a class="primary-btn" href="categories.html">Explore products</a><a class="secondary-btn" href="setup.html">Customize your case</a>
+          <a class="primary-btn" href="categories.html">Explore products</a><a class="secondary-btn hero-case-btn" href="setup.html"><span class="hero-case-spark">✦</span><span>Customize case</span></a>
         </div>
       </div>
 
@@ -85,6 +95,8 @@
 
 
 
+    <section class="section smart-phone-finder hidden" id="phoneFinderSection"></section>
+
     <section class="section info-home-section">
       <a href="about.html" class="info-home-card">
         <div class="info-home-icon">
@@ -98,7 +110,7 @@
         <span class="category-link-arrow">→</span>
       </a>
     </section>
-      <section class="section smart-phone-finder hidden" id="phoneFinderSection"></section>
+
   </main>
 
 
