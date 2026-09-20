@@ -70,7 +70,80 @@ function renderLayers(){let box=$("#layerList");if(!box)return;box.innerHTML=lay
 function renderFontPreview(){let box=$("#fontPreview");if(!box)return;let l=active(),cur=l?.type==="text"?l.font:"Manrope";box.innerHTML=FONTS.map(f=>`<button type="button" class="font-chip ${f===cur?"on":""}" data-font="${f}" style="font-family:'${f}'">${l?.type==="text"?(l.text||"Text"):"Aa"}</button>`).join("");box.querySelectorAll("[data-font]").forEach(b=>b.onclick=async()=>{let x=active();if(!x||x.type!=="text"){toast("Add or select text first");return}x.font=b.dataset.font;$("#font").value=x.font;try{await document.fonts.load(`700 145px "${x.font}"`)}catch{}redraw();renderFontPreview()})}
 function syncEffectButtons(){let l=active();document.querySelectorAll("[data-effect]").forEach(b=>b.classList.toggle("on",l?.type==="image"&&(l.effect||"original")===b.dataset.effect))}
 function updateReview(){let names={"#efefed":"White","#17181b":"Black","#565b62":"Gray","#293b5c":"Navy","#8db7d0":"Sky","#557ba9":"Blue","#d8a9b6":"Pink","#b66f7e":"Rose","#7a6995":"Purple","#a2ad94":"Sage","#55735e":"Green","#c7b99e":"Sand","#d17a42":"Orange","#b64249":"Red"};$("#reviewColor").style.background=color;$("#reviewColorName").textContent=names[color]||color;let photos=layers.filter(x=>x.type==="image").length,texts=layers.filter(x=>x.type==="text").length;$("#reviewDesign").textContent=!layers.length?"No artwork yet":[photos?`${photos} photo${photos>1?"s":""}`:"",texts?`${texts} text layer${texts>1?"s":""}`:""].filter(Boolean).join(" + ")}
-function saveCustomDraft(){let preview=cv.toDataURL("image/jpeg",.88);localStorage.setItem("hadi_custom_case_draft",JSON.stringify({kind:"custom_case",phone_model:"iPhone 17 Pro",case_color:color,preview,layers:layers.map(l=>({type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",x:l.x,y:l.y,s:l.s,r:l.r,effect:l.effect||"original"})),updated_at:new Date().toISOString()}));toast("Custom case saved — ready for cart integration")}
+function saveCustomDraft(){
+  try{
+    const preview=cv.toDataURL("image/jpeg",.88);
+    const draft={
+      kind:"custom_case",
+      phone_model:"iPhone 17 Pro",
+      case_color:color,
+      preview,
+      layers:layers.map(l=>({
+        type:l.type,name:l.name,text:l.text||"",font:l.font||"",color:l.color||"",
+        x:l.x,y:l.y,s:l.s,r:l.r,effect:l.effect||"original"
+      })),
+      updated_at:new Date().toISOString()
+    };
+
+    // Keep the editable draft exactly as before.
+    localStorage.setItem("hadi_custom_case_draft",JSON.stringify(draft));
+
+    // Read the case price already shown/configured by the page.
+    const priceEl=$("#casePrice")||$("#reviewPrice")||document.querySelector("[data-case-price]");
+    const rawPrice=priceEl?.dataset?.casePrice||priceEl?.textContent||"";
+    const match=String(rawPrice).replace(/,/g,"").match(/\d+(?:\.\d+)?/);
+    let price=match?Number(match[0]):NaN;
+
+    // Optional safe fallbacks if the site stores/configures the price elsewhere.
+    if(!Number.isFinite(price)){
+      const saved=Number(localStorage.getItem("hadi_custom_case_price"));
+      if(Number.isFinite(saved)&&saved>=0)price=saved;
+    }
+    if(!Number.isFinite(price)){
+      const configured=Number(window.HADI_CONFIG?.CUSTOM_CASE_PRICE);
+      if(Number.isFinite(configured)&&configured>=0)price=configured;
+    }
+
+    if(!Number.isFinite(price)){
+      toast("Case price is still loading — try again in a moment");
+      return;
+    }
+
+    let cart=[];
+    try{
+      const parsed=JSON.parse(localStorage.getItem("hadi_cart")||"[]");
+      cart=Array.isArray(parsed)?parsed:[];
+    }catch(e){cart=[]}
+
+    // Every finished custom design is its own cart line.
+    const designId="custom-case-"+Date.now();
+    cart.push({
+      key:designId,
+      id:designId,
+      kind:"custom_case",
+      is_custom_case:true,
+      name:"iPhone 17 Pro — Custom Silicone Case",
+      phone_model:"iPhone 17 Pro",
+      color_name:$("#reviewColorName")?.textContent?.trim()||color,
+      case_color:color,
+      price:Number(price),
+      image_url:preview,
+      custom_preview:preview,
+      custom_design:draft,
+      qty:1
+    });
+
+    localStorage.setItem("hadi_cart",JSON.stringify(cart));
+    window.dispatchEvent(new Event("storage"));
+    toast("Custom case added to cart ✓");
+
+    // Send the customer to the real cart after the item is safely stored.
+    setTimeout(()=>{window.location.href="index.html?openCart=1"},550);
+  }catch(e){
+    console.error("Custom case cart error:",e);
+    toast("Could not add custom case to cart");
+  }
+}
 function recolor(){if(!root)return;let c=new THREE.Color(color);root.traverse(o=>{if(!o.isMesh||o===printMesh)return;let a=Array.isArray(o.material)?o.material:[o.material];let n=a.map(m=>{m=m.clone();if(m.color)m.color.copy(c);m.roughness=.78;return m});o.material=Array.isArray(o.material)?n:n[0]})}
 async function init3d(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(31,1,.01,100);renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;$("#stage").innerHTML="";$("#stage").appendChild(renderer.domElement);scene.add(new THREE.HemisphereLight(0xffffff,0x94a5bb,2.6));let d=new THREE.DirectionalLight(0xffffff,3);d.position.set(4,6,7);scene.add(d);
  root=(await new GLTFLoader().loadAsync(MODEL)).scene;let b=new THREE.Box3().setFromObject(root),sz=b.getSize(new THREE.Vector3()),ce=b.getCenter(new THREE.Vector3());root.position.sub(ce);root.scale.setScalar(3.45/Math.max(sz.x,sz.y,sz.z));scene.add(root);
